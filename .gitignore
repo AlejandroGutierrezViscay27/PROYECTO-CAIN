@@ -1,0 +1,15 @@
+# Seguridad
+.env
+
+# Memoria de CAIN (NO subir)
+memoria.json
+memoria_usuario.json
+memoria_resumen.txt
+
+# Python
+__pycache__/
+*.pyc
+
+# Sistema
+.DS_Store
+Thumbs.db
