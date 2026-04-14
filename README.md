@@ -140,13 +140,6 @@ setx OPENAI_API_KEY "your_api_key_here"
 phyton cain.py
 
 Future Improvements
-- Tool system (file creation, automation)
-- Autonomous behavior (proactive interaction)
-- Voice integration (text-to-speech)
-- Advanced memory (semantic / vector-based)
-
-Future Improvements
-- Tool system (file creation, automation)
 - Autonomous behavior (proactive interaction)
 - Voice integration (text-to-speech)
 - Advanced memory (semantic / vector-based)
