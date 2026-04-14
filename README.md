@@ -1,36 +1,117 @@
-# CAIN - AI Agent with Personality and Memory
+# CAIN - Intelligent AI Agent with Personality, Memory and Tool Use
 
-CAIN is a personal AI agent designed to simulate a theatrical master of ceremonies with persistent memory, contextual understanding, and adaptive interaction.
+CAIN is an intelligent AI agent designed as a theatrical master of ceremonies, capable of maintaining context, remembering users, and interacting with real-world tools such as file systems.
 
-This project explores the design of intelligent agents beyond simple chatbots, focusing on personality, memory, and user context.
+This project goes beyond traditional chatbots by combining:
+- Personality-driven interaction
+- Persistent memory
+- Intent-aware behavior
+- Tool execution with decision-making
 
 ---
 
-##  Core Features
+## Core Features
 
- **Personality System**
-  - Theatrical, creative AI inspired by a master of ceremonies
-  - Context-aware tone adjustment (technical vs creative)
+### Personality System
+- Theatrical and expressive AI persona
+- Context-aware tone adaptation:
+  - Technical → clear and direct
+  - Creative → expressive and immersive
+- Dynamic response style control
 
- **Memory System**
-  - Short-term memory (conversation history)
-  - Long-term user memory (name, interests, role)
-  - Dynamic memory summarization
+---
 
- **Intent Detection**
-  - AI-powered classification:
-    - conversation
-    - story
-    - challenge
-    - technical
+### Memory System
 
- **Interest Extraction**
-  - Detects user preferences using AI
-  - Builds a persistent user profile
+**Short-Term Memory**
+- Conversation history (sliding window)
 
- **Contextual Interaction**
-  - Uses user memory to personalize responses
-  - Maintains conversational coherence
+**Long-Term Memory**
+- User profile stored in JSON:
+  - Name
+  - Interests
+  - Role (e.g. creator)
+
+**Dynamic Memory**
+- Automatic conversation summarization
+- Context compression to avoid overload
+
+---
+
+### Intent & Action Detection
+
+AI-powered classification of user input:
+
+- conversation
+- story
+- challenge
+- technical
+
+AND tool-based actions:
+
+- create_file
+- read_file
+- edit_file
+- delete_file
+
+---
+
+### Tool System (Agent Capabilities)
+
+CAIN can interact with the local environment:
+
+- Create files
+- Read files
+- Edit files intelligently
+- Delete files
+
+---
+
+### Intelligent File Editing
+
+- Not just appending text
+- Reads → understands → rewrites content
+- Maintains coherence and structure
+- Adapts content based on user intent
+
+---
+
+### Context Awareness
+
+- Tracks the **last active file**
+- Resolves implicit references:
+  - "add more"
+  - "modify that"
+  - "continue"
+
+---
+
+### Semantic Validation (Advanced)
+
+Before modifying a file, CAIN evaluates:
+
+> “Does this action make sense for this file?”
+
+- Prevents mixing unrelated topics
+- Avoids logical inconsistencies
+- Suggests better actions when needed
+
+---
+
+## Architecture Overview
+
+CAIN is built using a modular architecture:
+
+- Intent detection module (AI-based)
+- Action detection system
+- Memory system:
+  - History
+  - User profile
+  - Summary memory
+- Tool execution layer
+- Prompt engineering system
+- Context manager (`ultimo_archivo` logic)
+- Semantic validation layer
 
 ---
 
@@ -38,21 +119,10 @@ This project explores the design of intelligent agents beyond simple chatbots, f
 
 - Python
 - OpenAI API
-- JSON (persistent memory storage)
+- JSON (persistent storage)
 
 ---
 
-## Architecture Overview
-
-CAIN is built using a modular approach:
-
-- Intent detection module
-- Memory system (history + summary)
-- User profiling (name, interests, role)
-- Prompt engineering layer
-- Conversational engine
-
----
 
 ## How to Run
 
