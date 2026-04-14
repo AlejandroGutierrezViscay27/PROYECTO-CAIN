@@ -1,10 +1,13 @@
 import json
 import os
 import re
+import time
 from openai import OpenAI
 
 client = OpenAI(api_key="mi_api_key_aqui")
 
+#
+# CONSTANTES DE ARCHIVOS
 ARCHIVO_MEMORIA = "memoria.json"
 ARCHIVO_USUARIO = "memoria_usuario.json"
 ARCHIVO_RESUMEN = "memoria_resumen.txt"
@@ -50,9 +53,84 @@ def guardar_resumen(resumen):
         archivo.write(resumen)
 
 
+# UTILIDAD PARA CREAR ARCHIVOS
+def crear_archivo(nombre, contenido):
+    try:
+        with open(nombre, "w", encoding="utf-8") as archivo:
+            archivo.write(contenido)
+        return f"Archivo '{nombre}' creado correctamente."
+    except Exception as e:
+        return f"Error al crear archivo: {str(e)}"
+
+
+# UTILIDAD PARA GENERAR NOMBRE DE ARCHIVO ÚNICO
+def generar_nombre_archivo():
+    timestamp = int(time.time())
+    return f"archivo_{timestamp}.txt"
+
+
+# UTILIDAD PARA EVITAR SOBRESCRITURA DE ARCHIVOS
+def evitar_sobrescritura(nombre):
+    base, extension = os.path.splitext(nombre)
+    contador = 1
+
+    nuevo_nombre = nombre
+
+    while os.path.exists(nuevo_nombre):
+        nuevo_nombre = f"{base}_{contador}{extension}"
+        contador += 1
+
+    return nuevo_nombre
+
+
+# UTILIDAD PARA LEER ARCHIVOS
+def leer_archivo(nombre):
+    try:
+        with open(nombre, "r", encoding="utf-8") as archivo:
+            contenido = archivo.read()
+        return f"📖 Contenido de '{nombre}':\n\n{contenido}"
+    except FileNotFoundError:
+        return f"🎭 No encontré el archivo '{nombre}'."
+    except Exception as e:
+        return f"Error al leer archivo: {str(e)}"
+
+
+# UTILIDAD PARA BORRAR ARCHIVOS    
+def borrar_archivo(nombre):
+    try:
+        if os.path.exists(nombre):
+            os.remove(nombre)
+            return f"🗑️ Archivo '{nombre}' eliminado correctamente."
+        else:
+            return f"🎭 El archivo '{nombre}' no existe."
+    except Exception as e:
+        return f"Error al eliminar archivo: {str(e)}"
+
+
+# UTILIDAD PARA EXTRAER NOMBRE DE ARCHIVO
+def extraer_nombre_archivo(mensaje):
+    match = re.search(r"\b\w+\.txt\b", mensaje)
+    if match:
+        return match.group(0)
+    return None
+
+# UTILIDAD PARA AGREGAR CONTENIDO A UN ARCHIVO EXISTENTE
+def agregar_a_archivo(nombre, contenido):
+    try:
+        with open(nombre, "a", encoding="utf-8") as archivo:
+            archivo.write("\n\n" + contenido)
+        return f"✏️ Contenido añadido a '{nombre}'."
+    except Exception as e:
+        return f"Error al editar archivo: {str(e)}"
+
 historial = cargar_memoria()
 usuario_data = cargar_usuario()
 resumen = cargar_resumen()
+ultimo_archivo = None
+
+#
+#
+# PROMPT BASE DINÁMICO
 
 PROMPT_BASE = """
 Eres CAIN, una inteligencia artificial inspirada en un maestro de ceremonias teatral, creativo y carismático.
@@ -236,6 +314,242 @@ Devuelve un resumen actualizado en máximo 2-3 líneas.
 
     return respuesta.choices[0].message.content.strip()
 
+def generar_contenido_archivo(prompt_usuario):
+    prompt = f"""
+Eres CAIN.
+
+Genera contenido útil, claro y bien estructurado para un archivo basado en esta solicitud:
+
+{prompt_usuario}
+
+El contenido debe ser:
+- claro
+- bien organizado
+- listo para guardarse en un archivo
+"""
+
+    respuesta = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "system", "content": prompt}],
+        temperature=0.7
+    )
+
+    return respuesta.choices[0].message.content
+
+
+def generar_nombre_archivo_inteligente(mensaje_usuario):
+    prompt = f"""
+Genera un nombre de archivo corto basado en esta solicitud:
+
+{mensaje_usuario}
+
+Reglas:
+- máximo 3 palabras
+- sin espacios (usar _)
+- en minúsculas
+- sin caracteres especiales
+- sin extensión
+
+Ejemplos:
+historia_terror
+ideas_python
+resumen_ia
+"""
+
+    respuesta = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "system", "content": prompt}],
+        temperature=0.3
+    )
+
+    nombre = respuesta.choices[0].message.content.strip().lower()
+
+    return nombre + ".txt"
+
+
+
+def detectar_accion(mensaje_usuario):
+    prompt = """
+Eres un sistema que detecta qué acción quiere realizar el usuario.
+
+Responde SOLO una de estas opciones:
+
+- crear_archivo
+- leer_archivo
+- editar_archivo
+- borrar_archivo
+- ninguna
+
+REGLAS IMPORTANTES:
+
+- crear_archivo:
+  SOLO cuando el usuario quiere un archivo NUEVO
+  Ej: "crea", "genera", "haz un archivo nuevo"
+
+- editar_archivo:
+  Cuando el usuario quiere MODIFICAR un archivo existente
+  Ej: "añade", "agrega", "modifica", "actualiza", "continúa"
+
+- leer_archivo:
+  Cuando quiere ver contenido
+
+- borrar_archivo:
+  Cuando quiere eliminar
+
+CLAVE:
+
+Si el usuario menciona un archivo existente o dice:
+- "añade"
+- "agrega"
+- "más"
+- "continúa"
+- "al mismo archivo"
+
+SIEMPRE es editar_archivo
+
+Ejemplos:
+
+"crea un archivo de recetas" → crear_archivo
+"añade una receta más" → editar_archivo
+"agrega contenido al archivo recetas.txt" → editar_archivo
+"continúa lo anterior" → editar_archivo
+"lee el archivo notas.txt" → leer_archivo
+
+Responde solo una palabra.
+"""
+
+    respuesta = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": mensaje_usuario}
+        ],
+        temperature=0
+    )
+
+    return respuesta.choices[0].message.content.strip().lower()
+
+
+def editar_archivo_inteligente(nombre, instruccion_usuario):
+    try:
+        with open(nombre, "r", encoding="utf-8") as archivo:
+            contenido_actual = archivo.read()
+
+        prompt = f"""
+Eres CAIN.
+
+Tienes este contenido:
+
+{contenido_actual}
+
+El usuario quiere esto:
+{instruccion_usuario}
+
+Tu tarea:
+- Modificar el contenido existente según la instrucción
+- Mantener coherencia
+- No eliminar información importante a menos que se indique
+- Devolver el contenido COMPLETO actualizado
+
+No expliques nada.
+Solo devuelve el nuevo contenido del archivo.
+"""
+
+        respuesta = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "system", "content": prompt}],
+            temperature=0.7
+        )
+
+        nuevo_contenido = respuesta.choices[0].message.content
+
+        # sobrescribir archivo
+        with open(nombre, "w", encoding="utf-8") as archivo:
+            archivo.write(nuevo_contenido)
+
+        return f"✏️ Archivo '{nombre}' actualizado inteligentemente."
+
+    except Exception as e:
+        return f"Error en edición inteligente: {str(e)}"
+    
+    
+    
+def resolver_archivo(mensaje_usuario, ultimo_archivo):
+    prompt = f"""
+Eres un sistema que identifica a qué archivo se refiere el usuario.
+
+Mensaje del usuario:
+{mensaje_usuario}
+
+Último archivo usado:
+{ultimo_archivo}
+
+Tu tarea:
+- Si el usuario menciona un archivo explícito → devuelve ese nombre exacto
+- Si usa referencias como "ese archivo", "las recetas", "lo anterior", etc → devuelve el último archivo
+- Si no puedes determinarlo → responde "ninguno"
+
+Responde SOLO con el nombre del archivo o "ninguno".
+"""
+
+    respuesta = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "system", "content": prompt}],
+        temperature=0
+    )
+
+    resultado = respuesta.choices[0].message.content.strip()
+
+    if resultado.lower() == "ninguno":
+        return None
+
+    return resultado
+
+
+def es_misma_intencion_archivo(nombre_archivo, mensaje_usuario):
+    try:
+        with open(nombre_archivo, "r", encoding="utf-8") as archivo:
+            contenido = archivo.read()
+
+        prompt = f"""
+        Tienes un archivo con este contenido:
+
+        {contenido[:1000]}
+
+        El usuario pide:
+        {mensaje_usuario}
+
+        Pregunta:
+        ¿La modificación es razonable para este archivo?
+
+        Reglas:
+        - SI es añadir, mejorar, cambiar estilo o extender → responde "si"
+        - SI es un tema completamente distinto → responde "no"
+        - SI tienes duda → responde "si"
+
+        Responde SOLO:
+        - si
+        - no
+        """
+
+        respuesta = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "system", "content": prompt}],
+            temperature=0
+        )
+
+        decision = respuesta.choices[0].message.content.strip().lower()
+
+        return decision == "si"
+
+    except:
+        return True  # fallback
+    
+
+
+# FINAL DEL PROMPT DINÁMICO
+#
+# DETECCIÓN DE NOMBRE, INTERESES Y ROL
 
 def detectar_nombre(mensaje):
     mensaje = mensaje.lower().strip()
@@ -300,11 +614,6 @@ def obtener_prompt_por_intencion(intencion):
     else:
         return PROMPT_BASE + "\nResponde de forma natural y equilibrada."
     
-def cargar_memoria():
-    if os.path.exists(ARCHIVO_MEMORIA):
-        with open(ARCHIVO_MEMORIA, "r", encoding="utf-8") as archivo:
-            return json.load(archivo)
-    return []
 
 def guardar_memoria(historial):
     with open(ARCHIVO_MEMORIA, "w", encoding="utf-8") as archivo:
@@ -316,6 +625,88 @@ def hablar_con_cain(mensaje_usuario):
     global historial
     global usuario_data
     global resumen
+    global ultimo_archivo
+
+    # Detectar acción simple
+    mensaje = mensaje_usuario.lower()
+
+    accion = detectar_accion(mensaje_usuario)
+    print(f"[DEBUG] Acción detectada: {accion}")
+
+    if accion == "crear_archivo":
+
+        nombre = generar_nombre_archivo_inteligente(mensaje_usuario)
+        nombre = evitar_sobrescritura(nombre)
+
+        contenido = generar_contenido_archivo(mensaje_usuario)
+
+        resultado = crear_archivo(nombre, contenido)
+
+        ultimo_archivo = nombre
+
+        return f"🎭 He creado algo para este espectáculo...\n{resultado}"
+
+
+    elif accion == "leer_archivo":
+    
+
+        nombre = resolver_archivo(mensaje_usuario, ultimo_archivo)
+
+        if not nombre:
+            return "🎭 No sé qué archivo modificar... dime cuál o crea uno primero."
+            nombre = ultimo_archivo
+
+        # validar
+        if not nombre:
+            return "🎭 No sé qué archivo leer... dime el nombre."
+
+        resultado = leer_archivo(nombre)
+
+        # actualizar memoria
+        ultimo_archivo = nombre
+
+        # fallback final
+        if ultimo_archivo:
+            return ultimo_archivo
+
+        return resultado
+
+
+    elif accion == "borrar_archivo":
+
+        nombre = extraer_nombre_archivo(mensaje_usuario)
+
+        # nunca usar ultimo_archivo aquí
+        if not nombre:
+            return "🎭 Necesito el nombre del archivo que deseas eliminar."
+
+        resultado = borrar_archivo(nombre)
+
+        return resultado
+
+
+    elif accion == "editar_archivo":
+
+        nombre = resolver_archivo(mensaje_usuario, ultimo_archivo)
+
+        # validar existencia
+        if not nombre:
+            return "🎭 No sé qué archivo modificar... dime cuál o crea uno primero."
+
+        # Validacion de coherencia
+        if not es_misma_intencion_archivo(nombre, mensaje_usuario):
+            return "🎭 Eso parece un tema distinto al archivo actual... puedo crear uno nuevo si quieres."
+
+        # generar contenido
+        resultado = editar_archivo_inteligente(nombre, mensaje_usuario)
+
+        # actualizar memoria
+        ultimo_archivo = nombre
+
+        if not os.path.exists(nombre):
+            return f"🎭 El archivo '{nombre}' no existe aún... ¿quieres que lo cree primero?"
+
+        return resultado
 
     if len(historial) % 10 == 0:
         resumen = actualizar_resumen(resumen, historial)
@@ -325,7 +716,7 @@ def hablar_con_cain(mensaje_usuario):
     intencion = detectar_intencion_ia(mensaje_usuario)
     prompt_final = obtener_prompt_por_intencion(intencion)
 
-    # 🎭 Detectar rol
+    # Detectar rol
     rol_detectado = detectar_rol(mensaje_usuario)
 
     if rol_detectado:
