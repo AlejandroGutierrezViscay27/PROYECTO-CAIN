@@ -4,7 +4,7 @@ import re
 import time
 from openai import OpenAI
 
-client = OpenAI(api_key="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")
+client = OpenAI(api_key="MI_API_KEY_AQUi")  # Reemplaza con tu clave de API de OpenAI
 
 #
 # CONSTANTES DE ARCHIVOS
