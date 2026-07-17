@@ -1,28 +1,22 @@
-# Seguridad
+# Entorno
 .env
-
-# Memoria de CAIN (datos dinámicos)
+venv/
+__pycache__/
+*.pyc
+ 
+# Datos de runtime — memoria de CAIN (no son código)
+data/
+ 
+# Archivos generados por CAIN en la raíz
 memoria.json
 memoria_usuario.json
 memoria_resumen.txt
-
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.log
-*.sqlite3
-
-# Entornos virtuales
-venv/
-env/
-.venv/
-
-# Sistema operativo
-.DS_Store
-Thumbs.db
-
-# IDE / Editores
-.vscode/
-.idea/
+output.png
+ 
+# Proyectos generados por CAIN
+proyectos/
+ 
+# Archivos de texto generados por CAIN
+*.txt
+!.env.example
+!README.md

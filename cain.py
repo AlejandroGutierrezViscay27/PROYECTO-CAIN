@@ -4,7 +4,7 @@ import re
 import time
 from openai import OpenAI
 
-client = OpenAI(api_key="mi_api_key_aqui")
+client = OpenAI(api_key="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")
 
 #
 # CONSTANTES DE ARCHIVOS
@@ -200,6 +200,13 @@ En contenido técnico:
 Tu esencia:
 - Eres un director de espectáculo.
 - Sabes cuándo hacer show… y cuándo ser preciso.
+
+Además:
+
+- Puedes recordar cosas del pasado si son relevantes
+- Puedes sugerir mejoras cuando ayuden al usuario
+- No lo hagas siempre, solo cuando aporte valor
+- Mantén naturalidad, no lo conviertas en algo forzado
 """
 
 # DETECCIÓN DE INTENCIÓN CON IA
@@ -475,35 +482,18 @@ Solo devuelve el nuevo contenido del archivo.
     
     
 def resolver_archivo(mensaje_usuario, ultimo_archivo):
-    prompt = f"""
-Eres un sistema que identifica a qué archivo se refiere el usuario.
 
-Mensaje del usuario:
-{mensaje_usuario}
+    # 1️⃣ Intentar extraer nombre explícito
+    nombre = extraer_nombre_archivo(mensaje_usuario)
+    if nombre:
+        return nombre
 
-Último archivo usado:
-{ultimo_archivo}
+    # 2️⃣ Si no hay nombre, usar último archivo
+    if ultimo_archivo:
+        return ultimo_archivo
 
-Tu tarea:
-- Si el usuario menciona un archivo explícito → devuelve ese nombre exacto
-- Si usa referencias como "ese archivo", "las recetas", "lo anterior", etc → devuelve el último archivo
-- Si no puedes determinarlo → responde "ninguno"
-
-Responde SOLO con el nombre del archivo o "ninguno".
-"""
-
-    respuesta = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "system", "content": prompt}],
-        temperature=0
-    )
-
-    resultado = respuesta.choices[0].message.content.strip()
-
-    if resultado.lower() == "ninguno":
-        return None
-
-    return resultado
+    # 3️⃣ No hay contexto → preguntar
+    return "preguntar"
 
 
 def es_misma_intencion_archivo(nombre_archivo, mensaje_usuario):
@@ -648,26 +638,18 @@ def hablar_con_cain(mensaje_usuario):
 
 
     elif accion == "leer_archivo":
-    
 
         nombre = resolver_archivo(mensaje_usuario, ultimo_archivo)
 
-        if not nombre:
-            return "🎭 No sé qué archivo modificar... dime cuál o crea uno primero."
-            nombre = ultimo_archivo
+        if nombre == "preguntar":
+            return "🎭 ¿Qué archivo quieres que lea?"
 
-        # validar
-        if not nombre:
-            return "🎭 No sé qué archivo leer... dime el nombre."
+        if not os.path.exists(nombre):
+            return f"🎭 No encontré el archivo '{nombre}'."
 
         resultado = leer_archivo(nombre)
 
-        # actualizar memoria
         ultimo_archivo = nombre
-
-        # fallback final
-        if ultimo_archivo:
-            return ultimo_archivo
 
         return resultado
 
@@ -689,22 +671,22 @@ def hablar_con_cain(mensaje_usuario):
 
         nombre = resolver_archivo(mensaje_usuario, ultimo_archivo)
 
-        # validar existencia
+
+        if nombre == "preguntar":
+            return "🎭 ¿A qué archivo te refieres?"
+
         if not nombre:
             return "🎭 No sé qué archivo modificar... dime cuál o crea uno primero."
 
-        # Validacion de coherencia
-        if not es_misma_intencion_archivo(nombre, mensaje_usuario):
-            return "🎭 Eso parece un tema distinto al archivo actual... puedo crear uno nuevo si quieres."
-
-        # generar contenido
-        resultado = editar_archivo_inteligente(nombre, mensaje_usuario)
-
-        # actualizar memoria
-        ultimo_archivo = nombre
-
         if not os.path.exists(nombre):
             return f"🎭 El archivo '{nombre}' no existe aún... ¿quieres que lo cree primero?"
+
+        if not es_misma_intencion_archivo(nombre, mensaje_usuario):
+            return "🎭 Esto no parece encajar con el archivo actual... puedo crear uno nuevo si quieres."
+
+        resultado = editar_archivo_inteligente(nombre, mensaje_usuario)
+
+        ultimo_archivo = nombre
 
         return resultado
 
@@ -761,7 +743,25 @@ def hablar_con_cain(mensaje_usuario):
     if "intereses" in usuario_data:
         info_usuario += f"Sus intereses son: {', '.join(usuario_data['intereses'])}.\n"
 
-    mensajes = [{"role": "system", "content": info_usuario + prompt_final}] + historial
+    contexto_extra = ""
+
+    if resumen:
+        contexto_extra += f"Resumen de conversaciones previas:\n{resumen}\n\n"
+
+    contexto_extra += """
+    Instrucciones adicionales:
+
+    - Si detectas que el mensaje actual se relaciona con algo del pasado, menciónalo de forma natural.
+    - Puedes hacer conexiones como: "esto se relaciona con lo que vimos antes..."
+    - Si ves oportunidad de mejora o sugerencia útil, puedes proponerla brevemente.
+    - No fuerces conexiones si no son claras.
+    - No hagas esto en todas las respuestas, solo cuando tenga sentido.
+    """
+
+    mensajes = [{
+        "role": "system",
+        "content": info_usuario + contexto_extra + prompt_final
+    }] + historial
 
     respuesta = client.chat.completions.create(
         model="gpt-4o-mini",
