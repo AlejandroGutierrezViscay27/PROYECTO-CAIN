@@ -74,6 +74,15 @@ def borrar_archivo(nombre):
         return f"Error al eliminar archivo: {str(e)}"
 
 
+def editar_archivo(nombre, contenido):
+    try:
+        with open(nombre, "w", encoding="utf-8") as f:
+            f.write(contenido)
+        return f"✏️ Archivo '{nombre}' actualizado."
+    except Exception as e:
+        return f"Error en edición: {str(e)}"
+
+
 def agregar_a_archivo(nombre, contenido):
     try:
         with open(nombre, "a", encoding="utf-8") as f:

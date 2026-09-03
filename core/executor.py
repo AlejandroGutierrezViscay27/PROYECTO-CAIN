@@ -5,6 +5,8 @@ import threading
 import socket
 import time
 
+from core import prompts
+
 
 # ─── Configuración ───────────────────────────────────────────────────────────
 
@@ -119,6 +121,56 @@ def mostrar_plan(archivos, comando_ejecucion):
         f"   Comando a ejecutar:\n"
         f"      📟 {comando_ejecucion}\n\n"
         f"¿Procedo? (s/n): "
+    )
+
+
+def describir_comando(tipo, archivos):
+    """Genera una descripción legible del comando que se va a ejecutar."""
+    if tipo == "web":
+        return "python -m http.server (puerto libre automático)"
+    elif tipo == "python":
+        py_file = next((a for a in archivos if a.endswith(".py")), archivos[0])
+        return f"python {py_file}"
+    return "abrir archivo directamente"
+
+
+def corregir_y_reintentar(llm, ruta_archivo, error, mensaje_original, intentos=2):
+    """
+    Intenta corregir el código automáticamente cuando hay un error.
+    Máximo 2 intentos para no entrar en loop infinito.
+    """
+    for intento in range(1, intentos + 1):
+        print(f"\nCAIN: 🔧 Encontré un error. Intentando corregir (intento {intento}/{intentos})...")
+
+        try:
+            with open(ruta_archivo, "r", encoding="utf-8") as f:
+                codigo_actual = f.read()
+        except Exception:
+            return mensaje_original
+
+        codigo_corregido = prompts.generar_correccion_codigo(llm, codigo_actual, error)
+
+        try:
+            with open(ruta_archivo, "w", encoding="utf-8") as f:
+                f.write(codigo_corregido)
+        except Exception:
+            return mensaje_original
+
+        exito, nuevo_mensaje, nuevo_error = ejecutar_python(ruta_archivo)
+
+        if exito:
+            return (
+                f"🔧 Detecté y corregí un error automáticamente.\n\n"
+                f"📁 Archivo: {ruta_archivo}\n\n"
+                f"{nuevo_mensaje}"
+            )
+        else:
+            error = nuevo_error
+
+    return (
+        f"{mensaje_original}\n\n"
+        f"⚠️ Intenté corregirlo {intentos} veces pero el error persiste.\n"
+        f"Puedes pedirme que lo intente de nuevo con más detalles."
     )
 
 

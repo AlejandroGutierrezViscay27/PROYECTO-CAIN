@@ -4,7 +4,6 @@ from llm.openai_provider import OpenAIProvider
 
 from core import memory, tools, intent, prompts, executor
 import os
-import json
 
 
 class Cain:
@@ -49,9 +48,9 @@ class Cain:
     # ─── Herramientas de archivo ─────────────────────────────────────────────
 
     def _crear_archivo(self, mensaje_usuario):
-        nombre    = self._generar_nombre_archivo(mensaje_usuario)
+        nombre    = prompts.generar_nombre_archivo(self.llm, mensaje_usuario)
         nombre    = tools.evitar_sobrescritura(nombre)
-        contenido = self._generar_contenido_archivo(mensaje_usuario)
+        contenido = prompts.generar_contenido_archivo(self.llm, mensaje_usuario)
         resultado = tools.crear_archivo(nombre, contenido)
         self.ultimo_archivo = nombre
         return f"🎭 He creado algo para este espectáculo...\n{resultado}"
@@ -82,6 +81,18 @@ class Cain:
         resultado = self._editar_archivo_inteligente(nombre, mensaje_usuario)
         self.ultimo_archivo = nombre
         return resultado
+
+    def _editar_archivo_inteligente(self, nombre, instruccion_usuario):
+        try:
+            with open(nombre, "r", encoding="utf-8") as f:
+                contenido_actual = f.read()
+        except Exception as e:
+            return f"Error en edición: {str(e)}"
+
+        nuevo_contenido = prompts.generar_edicion_archivo(
+            self.llm, contenido_actual, instruccion_usuario
+        )
+        return tools.editar_archivo(nombre, nuevo_contenido)
 
     # ─── Memoria explícita ───────────────────────────────────────────────────
 
@@ -141,7 +152,7 @@ class Cain:
         tipo = intent.detectar_tipo_proyecto_llm(mensaje_usuario, self.llm)
         print(f"[DEBUG] Tipo de proyecto: {tipo}")
 
-        plan            = self._generar_plan_proyecto(mensaje_usuario, tipo)
+        plan            = prompts.generar_plan_proyecto(self.llm, mensaje_usuario, tipo)
         nombre_proyecto = plan.get("nombre", "proyecto_cain")
         archivos        = plan.get("archivos", {})
 
@@ -149,7 +160,7 @@ class Cain:
             return "🎭 No pude generar el proyecto. ¿Puedes darme más detalles?"
 
         lista_archivos = list(archivos.keys())
-        comando        = self._describir_comando(tipo, lista_archivos)
+        comando        = executor.describir_comando(tipo, lista_archivos)
 
         # ── Confirmación: web o terminal ─────────────────────────────────────
         if hasattr(self, "_confirmar_fn") and self._confirmar_fn:
@@ -175,80 +186,17 @@ class Cain:
 
         if info_error:
             ruta_archivo, error = info_error
-            resultado = self._corregir_y_reintentar(ruta_archivo, error, resultado)
+            resultado = executor.corregir_y_reintentar(self.llm, ruta_archivo, error, resultado)
 
         if url:
             return f"🎭 ¡El espectáculo está en vivo!\n\n{resultado}"
         return f"🎭 ¡Listo!\n\n{resultado}"
 
-    def _corregir_y_reintentar(self, ruta_archivo, error, mensaje_original, intentos=2):
-        """
-        Intenta corregir el código automáticamente cuando hay un error.
-        Máximo 2 intentos para no entrar en loop infinito.
-        """
-        for intento in range(1, intentos + 1):
-            print(f"\nCAIN: 🔧 Encontré un error. Intentando corregir (intento {intento}/{intentos})...")
-
-            try:
-                with open(ruta_archivo, "r", encoding="utf-8") as f:
-                    codigo_actual = f.read()
-            except Exception:
-                return mensaje_original
-
-            sistema = f"""
-Eres CAIN, un agente que corrige errores en código Python.
-
-El código que generaste tiene este error:
-{error}
-
-Código actual:
-{codigo_actual}
-
-Tu tarea:
-- Analiza el error
-- Corrige el código
-- Devuelve el código COMPLETO corregido
-- Sin explicaciones, sin bloques markdown, solo el código Python puro
-"""
-            codigo_corregido = self.llm.chat(
-                [{"role": "system", "content": sistema}],
-                temperature=0.2
-            ).strip()
-
-            if codigo_corregido.startswith("```"):
-                lineas = codigo_corregido.split("\n")
-                codigo_corregido = "\n".join(
-                    l for l in lineas if not l.startswith("```")
-                ).strip()
-
-            try:
-                with open(ruta_archivo, "w", encoding="utf-8") as f:
-                    f.write(codigo_corregido)
-            except Exception:
-                return mensaje_original
-
-            exito, nuevo_mensaje, nuevo_error = executor.ejecutar_python(ruta_archivo)
-
-            if exito:
-                return (
-                    f"🔧 Detecté y corregí un error automáticamente.\n\n"
-                    f"📁 Archivo: {ruta_archivo}\n\n"
-                    f"{nuevo_mensaje}"
-                )
-            else:
-                error = nuevo_error
-
-        return (
-            f"{mensaje_original}\n\n"
-            f"⚠️ Intenté corregirlo {intentos} veces pero el error persiste.\n"
-            f"Puedes pedirme que lo intente de nuevo con más detalles."
-        )
-
     # ─── Conversación ────────────────────────────────────────────────────────
 
     def _conversar(self, mensaje_usuario):
         if len(self.historial) > 0 and len(self.historial) % 10 == 0:
-            self.resumen = self._actualizar_resumen()
+            self.resumen = prompts.generar_resumen(self.llm, self.resumen, self.historial)
             memory.guardar_resumen(self.resumen)
             print("[DEBUG] Resumen actualizado")
 
@@ -303,156 +251,3 @@ Tu tarea:
                     self.usuario_data["intereses"].append(i)
             memory.guardar_usuario(self.usuario_data)
             print(f"[DEBUG] Intereses guardados: {self.usuario_data['intereses']}")
-
-    # ─── Helpers de LLM para archivos ────────────────────────────────────────
-
-    def _generar_contenido_archivo(self, prompt_usuario):
-        sistema = f"""
-Eres CAIN. Genera contenido útil, claro y bien estructurado para un archivo.
-
-Solicitud: {prompt_usuario}
-
-El contenido debe ser claro, bien organizado y listo para guardarse.
-"""
-        return self.llm.chat([{"role": "system", "content": sistema}], temperature=0.7)
-
-    def _generar_nombre_archivo(self, mensaje_usuario):
-        sistema = f"""
-Genera un nombre de archivo corto basado en esta solicitud:
-{mensaje_usuario}
-
-Reglas: máximo 3 palabras, sin espacios (usar _), en minúsculas, sin extensión.
-Ejemplos: historia_terror, ideas_python, resumen_ia
-
-Solo responde el nombre, nada más.
-"""
-        nombre = self.llm.chat(
-            [{"role": "system", "content": sistema}], temperature=0.3
-        ).strip().lower()
-        return nombre + ".txt"
-
-    def _editar_archivo_inteligente(self, nombre, instruccion_usuario):
-        try:
-            with open(nombre, "r", encoding="utf-8") as f:
-                contenido_actual = f.read()
-
-            sistema = f"""
-Eres CAIN. Tienes este contenido:
-
-{contenido_actual}
-
-El usuario quiere: {instruccion_usuario}
-
-Modifica el contenido según la instrucción. Mantén coherencia.
-No elimines información importante salvo que se indique.
-Devuelve el contenido COMPLETO actualizado. Sin explicaciones.
-"""
-            nuevo_contenido = self.llm.chat(
-                [{"role": "system", "content": sistema}], temperature=0.7
-            )
-            with open(nombre, "w", encoding="utf-8") as f:
-                f.write(nuevo_contenido)
-            return f"✏️ Archivo '{nombre}' actualizado."
-        except Exception as e:
-            return f"Error en edición: {str(e)}"
-
-    # ─── Helpers de LLM para proyectos ───────────────────────────────────────
-
-    def _generar_plan_proyecto(self, mensaje_usuario, tipo):
-        """
-        Le pide al LLM que genere el plan completo del proyecto:
-        nombre + archivos con su contenido.
-        """
-        if tipo == "web":
-            instruccion_tipo = """HTML, CSS y JavaScript en un solo archivo index.html.
-
-Reglas de calidad visual:
-- Usa fondo oscuro (#0a0a0a o similar) por defecto, nunca fondo blanco plano
-- Centra el contenido principal en la pantalla
-- Aplica estilos modernos: bordes redondeados, sombras, tipografía limpia
-- El canvas o área principal debe ocupar el 100% del ancho y alto de la ventana
-- Para Three.js: renderer.setSize(window.innerWidth, window.innerHeight) y canvas con width:100vw, height:100vh
-- Nunca uses tamaños fijos en píxeles para el contenedor principal
-- Si el proyecto es 3D, usa Three.js via CDN:
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-- Si necesita gráficas, usa Chart.js via CDN
-- El resultado debe verse como una aplicación real, no como un ejercicio básico"""
-
-        elif tipo == "python":
-            instruccion_tipo = """Python puro.
-- Si el script genera gráficas con matplotlib, usa plt.savefig('output.png')
-  en lugar de plt.show() para que el proceso termine automáticamente.
-- Sin dependencias externas salvo numpy, matplotlib y librerías estándar."""
-
-        else:
-            instruccion_tipo = "el formato más apropiado"
-
-        prompt = f"""
-Eres CAIN, un agente que genera proyectos de código completos y funcionales.
-
-El usuario quiere: {mensaje_usuario}
-
-Genera el proyecto en {instruccion_tipo}.
-
-Responde SOLO con un JSON válido con esta estructura exacta:
-{{
-  "nombre": "nombre_del_proyecto",
-  "archivos": {{
-    "nombre_archivo.ext": "contenido completo del archivo"
-  }}
-}}
-
-Reglas:
-- El nombre del proyecto: sin espacios, en minúsculas, con guiones bajos
-- El código debe ser completo y funcional, no un esqueleto
-- Para web: todo en un solo index.html (HTML + CSS + JS inline)
-- Para Python: código listo para ejecutar
-- No incluyas explicaciones fuera del JSON
-- No uses bloques de código markdown, solo JSON puro
-"""
-        respuesta = self.llm.chat(
-            [{"role": "system", "content": prompt}],
-            temperature=0.4
-        ).strip()
-
-        try:
-            if respuesta.startswith("```"):
-                respuesta = respuesta.split("```")[1]
-                if respuesta.startswith("json"):
-                    respuesta = respuesta[4:]
-            return json.loads(respuesta)
-        except json.JSONDecodeError:
-            print(f"[DEBUG] Error al parsear JSON del plan: {respuesta[:200]}")
-            return {}
-
-    def _describir_comando(self, tipo, archivos):
-        """Genera una descripción legible del comando que se va a ejecutar."""
-        if tipo == "web":
-            return "python -m http.server (puerto libre automático)"
-        elif tipo == "python":
-            py_file = next((a for a in archivos if a.endswith(".py")), archivos[0])
-            return f"python {py_file}"
-        return "abrir archivo directamente"
-
-    # ─── Resumen de conversación ─────────────────────────────────────────────
-
-    def _actualizar_resumen(self):
-        texto_historial = "\n".join([m["content"] for m in self.historial])
-        sistema = f"""
-Eres un sistema de memoria a largo plazo.
-
-Actualiza el resumen del usuario con la conversación reciente.
-Conserva: información importante, proyectos, intereses, contexto relevante.
-Ignora: saludos, conversaciones triviales.
-
-Resumen actual:
-{self.resumen}
-
-Nueva conversación:
-{texto_historial}
-
-Devuelve un resumen actualizado en máximo 3 líneas.
-"""
-        return self.llm.chat(
-            [{"role": "user", "content": sistema}], temperature=0.3
-        ).strip()
