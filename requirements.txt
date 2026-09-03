@@ -1,0 +1,11 @@
+openai>=1.0.0
+python-dotenv>=1.0.0
+# fastapi<0.116 keeps starlette on the 0.x series - starlette>=1.0.0's
+# Jinja2Templates breaks template caching on Python 3.14
+# (TypeError: cannot use 'tuple' as a dict key), and no Jinja2 release
+# fixes it yet: https://github.com/pallets/jinja/issues/2180
+fastapi>=0.110.0,<0.116.0
+starlette<1.0.0
+uvicorn>=0.29.0
+jinja2>=3.1.0
+python-multipart>=0.0.9

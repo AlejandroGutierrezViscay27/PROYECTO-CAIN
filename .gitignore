@@ -20,3 +20,4 @@ proyectos/
 *.txt
 !.env.example
 !README.md
+!requirements.txt
