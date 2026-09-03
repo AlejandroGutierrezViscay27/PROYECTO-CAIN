@@ -3,6 +3,7 @@ from llm.openai_provider import OpenAIProvider
 # from llm.ollama_provider import OllamaProvider
 
 from core import memory, tools, intent, prompts, executor
+from core.tool_schemas import TOOLS, PROMPT_ENRUTADOR
 import os
 
 
@@ -22,63 +23,85 @@ class Cain:
         self.resumen        = memory.cargar_resumen()
         self.ultimo_archivo = None
 
+        self._herramientas = {
+            "crear_archivo":     self._crear_archivo,
+            "leer_archivo":      self._leer_archivo,
+            "editar_archivo":    self._editar_archivo,
+            "borrar_archivo":    self._borrar_archivo,
+            "ejecutar_proyecto": self._flujo_ejecutar_proyecto,
+            "memoria_recordar":  self._memoria_recordar,
+            "memoria_olvidar":   self._memoria_olvidar,
+            "memoria_consultar": self._memoria_consultar,
+        }
+
     # ─── Punto de entrada ────────────────────────────────────────────────────
 
     def chat(self, mensaje_usuario):
         """Procesa un mensaje del usuario y retorna la respuesta de CAIN."""
 
-        accion = self._detectar_accion(mensaje_usuario)
-        print(f"[DEBUG] Acción detectada: {accion}")
+        resultado = self.llm.chat_with_tools(
+            [
+                {"role": "system", "content": PROMPT_ENRUTADOR},
+                {"role": "user",   "content": mensaje_usuario},
+            ],
+            tools=TOOLS,
+            temperature=0.2,
+        )
 
-        if accion == "crear_archivo":
-            return self._crear_archivo(mensaje_usuario)
-        elif accion == "leer_archivo":
-            return self._leer_archivo(mensaje_usuario)
-        elif accion == "borrar_archivo":
-            return self._borrar_archivo(mensaje_usuario)
-        elif accion == "editar_archivo":
-            return self._editar_archivo(mensaje_usuario)
-        elif accion == "ejecutar_proyecto":
-            return self._flujo_ejecutar_proyecto(mensaje_usuario)
-        elif accion in ("memoria_recordar", "memoria_olvidar", "memoria_consultar"):
-            return self._flujo_memoria(accion, mensaje_usuario)
+        tool_call = resultado.get("tool_call")
+        if tool_call:
+            nombre     = tool_call["name"]
+            argumentos = tool_call["arguments"]
+            print(f"[DEBUG] Herramienta invocada: {nombre}({argumentos})")
+            handler = self._herramientas.get(nombre)
+            if handler:
+                return handler(argumentos)
 
         return self._conversar(mensaje_usuario)
 
     # ─── Herramientas de archivo ─────────────────────────────────────────────
 
-    def _crear_archivo(self, mensaje_usuario):
-        nombre    = prompts.generar_nombre_archivo(self.llm, mensaje_usuario)
-        nombre    = tools.evitar_sobrescritura(nombre)
-        contenido = prompts.generar_contenido_archivo(self.llm, mensaje_usuario)
+    def _crear_archivo(self, argumentos):
+        nombre = argumentos.get("nombre_archivo") or tools.generar_nombre_timestamp()
+        nombre = tools.normalizar_nombre_txt(nombre)
+        nombre = tools.evitar_sobrescritura(nombre)
+        contenido = argumentos.get("contenido", "")
         resultado = tools.crear_archivo(nombre, contenido)
         self.ultimo_archivo = nombre
         return f"🎭 He creado algo para este espectáculo...\n{resultado}"
 
-    def _leer_archivo(self, mensaje_usuario):
-        nombre = tools.resolver_archivo(mensaje_usuario, self.ultimo_archivo)
-        if nombre == "preguntar":
+    def _leer_archivo(self, argumentos):
+        nombre = argumentos.get("nombre_archivo") or self.ultimo_archivo
+        if not nombre:
             return "🎭 ¿Qué archivo quieres que lea?"
+        nombre = tools.normalizar_nombre_txt(nombre)
         if not os.path.exists(nombre):
             return f"🎭 No encontré el archivo '{nombre}'."
         self.ultimo_archivo = nombre
         return tools.leer_archivo(nombre)
 
-    def _borrar_archivo(self, mensaje_usuario):
-        nombre = tools.extraer_nombre_archivo(mensaje_usuario)
+    def _borrar_archivo(self, argumentos):
+        nombre = argumentos.get("nombre_archivo") or self.ultimo_archivo
         if not nombre:
             return "🎭 Necesito el nombre del archivo que deseas eliminar."
-        return tools.borrar_archivo(nombre)
+        nombre = tools.normalizar_nombre_txt(nombre)
+        resultado = tools.borrar_archivo(nombre)
+        if nombre == self.ultimo_archivo:
+            self.ultimo_archivo = None
+        return resultado
 
-    def _editar_archivo(self, mensaje_usuario):
-        nombre = tools.resolver_archivo(mensaje_usuario, self.ultimo_archivo)
-        if nombre == "preguntar":
+    def _editar_archivo(self, argumentos):
+        nombre = argumentos.get("nombre_archivo") or self.ultimo_archivo
+        if not nombre:
             return "🎭 ¿A qué archivo te refieres?"
+        nombre = tools.normalizar_nombre_txt(nombre)
         if not os.path.exists(nombre):
             return f"🎭 El archivo '{nombre}' no existe aún... ¿quieres que lo cree primero?"
-        if not intent.es_misma_intencion_archivo(nombre, mensaje_usuario, self.llm):
+
+        instruccion = argumentos.get("instruccion", "")
+        if not intent.es_misma_intencion_archivo(nombre, instruccion, self.llm):
             return "🎭 Esto no parece encajar con el archivo actual... puedo crear uno nuevo si quieres."
-        resultado = self._editar_archivo_inteligente(nombre, mensaje_usuario)
+        resultado = self._editar_archivo_inteligente(nombre, instruccion)
         self.ultimo_archivo = nombre
         return resultado
 
@@ -96,63 +119,64 @@ class Cain:
 
     # ─── Memoria explícita ───────────────────────────────────────────────────
 
-    def _flujo_memoria(self, accion, mensaje_usuario):
-        """Maneja comandos explícitos de memoria: recordar, olvidar, consultar."""
+    def _memoria_consultar(self, argumentos):
+        return memory.consultar_memoria(self.usuario_data, self.resumen)
 
-        if accion == "memoria_consultar":
-            return memory.consultar_memoria(self.usuario_data, self.resumen)
+    def _memoria_recordar(self, argumentos):
+        contenido = argumentos.get("contenido", "").strip().lower()
+        if not contenido:
+            return "🎭 ¿Qué quieres que recuerde?"
+        self.usuario_data = memory.agregar_nota(self.usuario_data, contenido)
+        memory.guardar_usuario(self.usuario_data)
+        return f"🧠 Anotado. Recordaré que {contenido}."
 
-        contenido = intent.extraer_contenido_memoria(mensaje_usuario, accion, self.llm)
-        print(f"[DEBUG] Contenido de memoria extraído: '{contenido}'")
+    def _memoria_olvidar(self, argumentos):
+        objetivo = argumentos.get("objetivo", "")
 
-        if accion == "memoria_recordar":
-            self.usuario_data = memory.agregar_nota(self.usuario_data, contenido)
+        if objetivo == "todo":
+            self.usuario_data = {}
             memory.guardar_usuario(self.usuario_data)
-            return f"🧠 Anotado. Recordaré que {contenido}."
+            memory.limpiar_historial_completo()
+            self.historial = []
+            self.resumen   = ""
+            return "🧠 Hecho. He olvidado todo lo que sabía de ti."
 
-        elif accion == "memoria_olvidar":
-            if contenido == "todo":
-                self.usuario_data = {}
-                memory.guardar_usuario(self.usuario_data)
-                memory.limpiar_historial_completo()
-                self.historial = []
-                self.resumen   = ""
-                return "🧠 Hecho. He olvidado todo lo que sabía de ti."
+        elif objetivo == "historial":
+            memory.limpiar_historial_completo()
+            self.historial = []
+            self.resumen   = ""
+            return "🧠 Historial borrado. Empezamos desde cero."
 
-            elif contenido == "historial":
-                memory.limpiar_historial_completo()
-                self.historial = []
-                self.resumen   = ""
-                return "🧠 Historial borrado. Empezamos desde cero."
+        elif objetivo in ("nombre", "rol", "intereses", "notas"):
+            self.usuario_data = memory.olvidar_campo(self.usuario_data, objetivo)
+            memory.guardar_usuario(self.usuario_data)
+            return f"🧠 Listo. He olvidado tu {objetivo}."
 
-            elif contenido in ("nombre", "rol", "intereses", "notas"):
-                self.usuario_data = memory.olvidar_campo(self.usuario_data, contenido)
-                memory.guardar_usuario(self.usuario_data)
-                return f"🧠 Listo. He olvidado tu {contenido}."
+        elif objetivo == "nota_especifica":
+            fragmento = argumentos.get("fragmento", "").strip().lower()
+            if not fragmento:
+                return "🎭 ¿Qué nota quieres que olvide?"
+            self.usuario_data, eliminadas = memory.olvidar_nota(self.usuario_data, fragmento)
+            memory.guardar_usuario(self.usuario_data)
+            if eliminadas > 0:
+                return f"🧠 Listo. He olvidado lo relacionado con '{fragmento}'."
+            return f"🧠 No encontré nada relacionado con '{fragmento}' en mi memoria."
 
-            else:
-                self.usuario_data, eliminadas = memory.olvidar_nota(
-                    self.usuario_data, contenido
-                )
-                memory.guardar_usuario(self.usuario_data)
-                if eliminadas > 0:
-                    return f"🧠 Listo. He olvidado lo relacionado con '{contenido}'."
-                return f"🧠 No encontré nada relacionado con '{contenido}' en mi memoria."
-
-        return "🎭 No entendí qué querías hacer con la memoria."
+        return "🎭 No entendí qué querías que olvidara."
 
     # ─── Ejecución de proyectos ──────────────────────────────────────────────
 
-    def _flujo_ejecutar_proyecto(self, mensaje_usuario):
+    def _flujo_ejecutar_proyecto(self, argumentos):
         """
         Flujo completo con confirmación.
         - Modo terminal: usa input() clásico
         - Modo web: usa self._confirmar_fn callback inyectado por app.py
         """
-        tipo = intent.detectar_tipo_proyecto_llm(mensaje_usuario, self.llm)
+        descripcion = argumentos.get("descripcion", "")
+        tipo        = argumentos.get("tipo", "otro")
         print(f"[DEBUG] Tipo de proyecto: {tipo}")
 
-        plan            = prompts.generar_plan_proyecto(self.llm, mensaje_usuario, tipo)
+        plan            = prompts.generar_plan_proyecto(self.llm, descripcion, tipo)
         nombre_proyecto = plan.get("nombre", "proyecto_cain")
         archivos        = plan.get("archivos", {})
 
@@ -220,9 +244,6 @@ class Cain:
         return respuesta_texto
 
     # ─── Detección (delega en intent) ────────────────────────────────────────
-
-    def _detectar_accion(self, mensaje_usuario):
-        return intent.detectar_accion_llm(mensaje_usuario, self.llm)
 
     def _detectar_intencion(self, mensaje_usuario):
         return intent.detectar_intencion_llm(mensaje_usuario, self.llm)

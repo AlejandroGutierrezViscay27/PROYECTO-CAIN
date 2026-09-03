@@ -126,33 +126,6 @@ def construir_prompt(intencion, usuario_data, resumen):
 
 # ─── Helpers de LLM para archivos ────────────────────────────────────────────
 
-def generar_contenido_archivo(llm, prompt_usuario):
-    sistema = f"""
-Eres CAIN. Genera contenido útil, claro y bien estructurado para un archivo.
-
-Solicitud: {prompt_usuario}
-
-El contenido debe ser claro, bien organizado y listo para guardarse.
-"""
-    return llm.chat([{"role": "system", "content": sistema}], temperature=0.7)
-
-
-def generar_nombre_archivo(llm, mensaje_usuario):
-    sistema = f"""
-Genera un nombre de archivo corto basado en esta solicitud:
-{mensaje_usuario}
-
-Reglas: máximo 3 palabras, sin espacios (usar _), en minúsculas, sin extensión.
-Ejemplos: historia_terror, ideas_python, resumen_ia
-
-Solo responde el nombre, nada más.
-"""
-    nombre = llm.chat(
-        [{"role": "system", "content": sistema}], temperature=0.3
-    ).strip().lower()
-    return nombre + ".txt"
-
-
 def generar_edicion_archivo(llm, contenido_actual, instruccion_usuario):
     """Pide al LLM el contenido completo actualizado de un archivo existente."""
     sistema = f"""

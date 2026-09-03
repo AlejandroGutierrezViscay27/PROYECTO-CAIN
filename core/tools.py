@@ -1,5 +1,4 @@
 import os
-import re
 import time
 
 
@@ -21,25 +20,11 @@ def evitar_sobrescritura(nombre):
     return nuevo_nombre
 
 
-def extraer_nombre_archivo(mensaje):
-    """Extrae un nombre de archivo .txt mencionado en el mensaje."""
-    match = re.search(r"\b\w+\.txt\b", mensaje)
-    return match.group(0) if match else None
-
-
-def resolver_archivo(mensaje_usuario, ultimo_archivo):
-    """
-    Determina qué archivo usar:
-    1. Nombre explícito en el mensaje
-    2. Último archivo usado
-    3. Preguntar al usuario
-    """
-    nombre = extraer_nombre_archivo(mensaje_usuario)
-    if nombre:
-        return nombre
-    if ultimo_archivo:
-        return ultimo_archivo
-    return "preguntar"
+def normalizar_nombre_txt(nombre):
+    """Agrega la extensión .txt si el nombre no tiene ninguna."""
+    if not os.path.splitext(nombre)[1]:
+        return nombre + ".txt"
+    return nombre
 
 
 # ─── Operaciones de archivo ──────────────────────────────────────────────────

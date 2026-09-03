@@ -26,3 +26,9 @@ class OllamaProvider(LLMProvider):
             "OllamaProvider aún no está implementado. "
             "Instala Ollama y completa este método cuando estés listo."
         )
+
+    def chat_with_tools(self, messages: list, tools: list, temperature: float = 0.3) -> dict:
+        raise NotImplementedError(
+            "OllamaProvider aún no está implementado. "
+            "Instala Ollama y completa este método cuando estés listo."
+        )

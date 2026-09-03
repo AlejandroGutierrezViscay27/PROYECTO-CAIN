@@ -66,12 +66,17 @@ def ejecutar_python(ruta_archivo):
     """
     try:
         carpeta = os.path.dirname(os.path.abspath(ruta_archivo))
+        env = os.environ.copy()
+        env["PYTHONIOENCODING"] = "utf-8"  # el proceso hijo debe escribir su stdout/stderr en UTF-8
         resultado = subprocess.run(
             ["python", os.path.basename(ruta_archivo)],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=TIMEOUT_SEGUNDOS,
-            cwd=carpeta  # ← ejecuta desde la carpeta del proyecto
+            cwd=carpeta,  # ← ejecuta desde la carpeta del proyecto
+            env=env
         )
         if resultado.returncode == 0:
             salida  = resultado.stdout.strip()
