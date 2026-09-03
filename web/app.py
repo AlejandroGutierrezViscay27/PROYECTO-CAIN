@@ -116,6 +116,31 @@ async def websocket_endpoint(websocket: WebSocket):
     cain_agent._confirmar_fn = confirmar_fn
     loop = asyncio.get_event_loop()
 
+    async def procesar_mensaje(mensaje):
+        await websocket.send_text(json.dumps({"tipo": "estado", "estado": "pensando"}))
+
+        try:
+            respuesta = await loop.run_in_executor(pool, cain_agent.chat, mensaje)
+        except Exception as e:
+            # Al correr en una tarea aparte, una excepción aquí no la ve
+            # el try/except del bucle principal — hay que avisar al
+            # cliente explícitamente o se queda esperando para siempre.
+            await websocket.send_text(json.dumps({"tipo": "error", "contenido": str(e)}))
+            return
+
+        await websocket.send_text(json.dumps({
+            "tipo": "respuesta", "contenido": respuesta, "estado": "listo"
+        }))
+
+        usuario = cain_agent.usuario_data
+        await websocket.send_text(json.dumps({
+            "tipo":      "memoria",
+            "nombre":    usuario.get("nombre", None),
+            "intereses": usuario.get("intereses", []),
+            "notas":     usuario.get("notas", []),
+            "mensajes":  len(cain_agent.historial)
+        }))
+
     try:
         while True:
             data     = await websocket.receive_text()
@@ -132,22 +157,10 @@ async def websocket_endpoint(websocket: WebSocket):
             if not mensaje:
                 continue
 
-            await websocket.send_text(json.dumps({"tipo": "estado", "estado": "pensando"}))
-
-            respuesta = await loop.run_in_executor(pool, cain_agent.chat, mensaje)
-
-            await websocket.send_text(json.dumps({
-                "tipo": "respuesta", "contenido": respuesta, "estado": "listo"
-            }))
-
-            usuario = cain_agent.usuario_data
-            await websocket.send_text(json.dumps({
-                "tipo":      "memoria",
-                "nombre":    usuario.get("nombre", None),
-                "intereses": usuario.get("intereses", []),
-                "notas":     usuario.get("notas", []),
-                "mensajes":  len(cain_agent.historial)
-            }))
+            # Se lanza como tarea aparte para que este bucle siga libre
+            # y pueda seguir leyendo el WebSocket (p.ej. la respuesta de
+            # confirmación) mientras cain_agent.chat() se ejecuta.
+            asyncio.create_task(procesar_mensaje(mensaje))
 
     except WebSocketDisconnect:
         cain_agent._confirmar_fn = None
