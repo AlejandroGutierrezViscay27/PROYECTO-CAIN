@@ -1,0 +1,289 @@
+════════════════════════════════════════════════════════════════
+                         C  A  I  N
+              Agente de Inteligencia Artificial Personal
+════════════════════════════════════════════════════════════════
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ¿QUÉ ES CAIN?
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CAIN es un agente de inteligencia artificial conversacional con
+memoria, personalidad y capacidad de actuar sobre su entorno.
+
+No es un chatbot tradicional. No es un asistente genérico.
+Es un sistema que combina conversación natural, memoria
+persistente, toma de decisiones y ejecución de acciones reales
+en el mundo digital.
+
+La diferencia fundamental con un chatbot común:
+
+  Chatbot normal  →  responde preguntas
+  CAIN            →  entiende contexto, recuerda, decide y actúa
+
+En una frase:
+"Un agente de IA con memoria, personalidad y capacidad de actuar,
+diseñado para comportarse más como un compañero que como un bot."
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  IDENTIDAD Y PERSONALIDAD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CAIN tiene una identidad definida: Maestro de Ceremonias.
+
+  Estilo        →  teatral, expresivo, carismático
+  Comportamiento →  adaptable según el contexto
+  Equilibrio    →  útil primero, interesante después
+  Principio     →  no ejecuta ciegamente, colabora
+
+Esto no es solo estética. Es diseño de interacción consciente.
+CAIN no debe convertirse en un asistente genérico tipo Alexa
+ni en un bot exagerado sin utilidad real. Tiene carácter propio
+y lo mantiene en cada conversación.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  OBJETIVO DE SU EXISTENCIA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CAIN existe con tres propósitos simultáneos:
+
+  1. EXPLORACIÓN TÉCNICA
+     Demostrar que es posible construir un agente que pase de
+     ser un "respondedor" a un "asistente con comportamiento".
+     Explorar memoria, toma de decisiones, ejecución de acciones
+     y autonomía progresiva desde cero.
+
+  2. PORTAFOLIO PROFESIONAL
+     Un proyecto demostrativo de nivel real para el campo de
+     datos, IA y sistemas. No un tutorial seguido, sino un
+     sistema construido con criterio propio.
+
+  3. HERRAMIENTA PERSONAL
+     A largo plazo, un compañero digital que conoce al usuario,
+     recuerda su contexto, ejecuta tareas reales y eventualmente
+     controla su entorno físico y digital de forma inteligente.
+
+La evolución objetivo es:
+
+  Chatbot → Asistente → Agente → Sistema Inteligente
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  CAPACIDADES ACTUALES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CAIN ya es un agente funcional con las siguientes capacidades:
+
+  CONVERSACIÓN INTELIGENTE
+  ✦ Detecta la intención del usuario (historia, reto, técnico,
+    conversación) y adapta tono, profundidad y estilo.
+
+  MEMORIA EN TRES CAPAS
+  ✦ Corto plazo   → historial de los últimos 30 mensajes
+  ✦ Largo plazo   → datos del usuario (nombre, intereses, notas)
+  ✦ Resumen       → síntesis dinámica generada cada 10 mensajes
+
+  MEMORIA EXPLÍCITA
+  ✦ "recuerda que prefiero código comentado"  → guarda la nota
+  ✦ "qué sabes de mí"     → muestra todo lo guardado
+  ✦ "olvida mi historial" → borra conversaciones
+  ✦ "olvida todo"         → reseteo completo
+
+  HERRAMIENTAS DE ARCHIVO
+  ✦ Crear, leer, editar y borrar archivos de texto
+  ✦ Edición inteligente con validación de coherencia
+
+  EJECUCIÓN DE PROYECTOS
+  ✦ Genera código real (web o Python) desde lenguaje natural
+  ✦ Proyectos web con Three.js, CSS y JavaScript
+  ✦ Scripts Python con ejecución automática
+  ✦ Corrección automática de errores (hasta 2 reintentos)
+  ✦ Puerto dinámico para servidores locales
+
+  INTERFAZ WEB
+  ✦ Chat en tiempo real via WebSockets
+  ✦ Panel lateral con memoria del usuario
+  ✦ Lista de proyectos generados interactiva
+  ✦ Estética teatral oscura — identidad visual propia
+
+  VOZ BIDIRECCIONAL
+  ✦ Push-to-talk: graba audio en el navegador y lo envía por WebSocket
+  ✦ Transcripción local con faster-whisper (sin APIs externas)
+  ✦ Respuesta sintetizada con Piper TTS y reproducida en el cliente
+
+  LA CARA
+  ✦ Rostro 3D reactivo (Three.js) que refleja el estado de CAIN en vivo
+  ✦ Deformación orgánica por ruido simplex, con normales recalculadas
+    tras la deformación — la luz responde a las abolladuras reales
+  ✦ Halo exterior suave y reacción al volumen real de su propia voz
+    (Web Audio API) mientras habla
+  ✦ Estados: listo, pensando, escuchando, ejecutando, hablando
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ARQUITECTURA Y ESTRUCTURA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+cain/
+├── core/
+│   ├── agent.py      → clase Cain, orquesta todos los módulos
+│   ├── memory.py     → gestión de las 3 capas de memoria
+│   ├── tools.py      → operaciones sobre archivos
+│   ├── intent.py     → detección de intención y acción
+│   ├── prompts.py    → construcción del prompt dinámico
+│   └── executor.py   → ejecución de código y proyectos
+│
+├── llm/
+│   ├── base.py            → clase abstracta LLMProvider
+│   ├── openai_provider.py → implementación OpenAI
+│   └── ollama_provider.py → preparado para modelo local
+│
+├── voice/
+│   ├── base.py            → clases abstractas SpeechToText / TextToSpeech
+│   ├── stt.py             → FasterWhisperSTT (reconocimiento local, CPU)
+│   └── tts.py             → PiperTTS / APITTS (síntesis, según TTS_PROVIDER)
+│
+├── web/
+│   ├── app.py             → servidor FastAPI + WebSockets
+│   ├── static/
+│   │   ├── style.css      → interfaz teatral oscura
+│   │   └── js/            → chat, websocket, estado, modal, voz, memoria,
+│   │                         proyectos y face.js (La Cara, Three.js)
+│   └── templates/
+│       └── index.html     → estructura de la interfaz
+│
+├── data/                  → memoria en runtime (no en git)
+├── proyectos/             → proyectos generados (no en git)
+├── main.py                → punto de entrada (web o terminal)
+├── .env                   → configuración y API keys
+└── requirements.txt       → dependencias del proyecto
+
+DECISIÓN DE DISEÑO CLAVE — Capa LLM Abstracta:
+
+  CAIN no conoce a OpenAI ni a Ollama directamente.
+  Solo habla con LLMProvider. Cambiar de modelo es una línea:
+
+    self.llm = OpenAIProvider()      ← actual
+    self.llm = OllamaProvider(...)   ← futuro (modelo local)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  TECNOLOGÍAS UTILIZADAS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  BACKEND
+  ✦ Python 3.x          → lenguaje principal
+  ✦ FastAPI             → servidor web y API REST
+  ✦ Uvicorn             → servidor ASGI con soporte WebSockets
+  ✦ WebSockets          → comunicación en tiempo real
+  ✦ python-dotenv       → gestión de variables de entorno
+  ✦ Jinja2              → templates HTML
+
+  INTELIGENCIA ARTIFICIAL
+  ✦ OpenAI API (gpt-4o-mini) → modelo actual
+  ✦ Ollama               → destino de migración (modelo local)
+  ✦ llama3.1:8b          → modelo recomendado para Ollama
+
+  FRONTEND
+  ✦ HTML5 + CSS3 + JavaScript vanilla
+  ✦ WebSockets API nativa del navegador
+  ✦ Three.js (CDN)       → La Cara (rostro reactivo) y proyectos 3D generados
+  ✦ Chart.js (CDN)       → proyectos de gráficas
+
+  HARDWARE OBJETIVO
+  ✦ AMD RX 7600 (8GB VRAM) → para inferencia local con Ollama
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ROADMAP — HACIA DÓNDE VA CAIN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ FASE 1 — BASE CONVERSACIONAL
+   Prompts dinámicos, detección de intención, personalidad
+   de maestro de ceremonias, conversación fluida.
+
+✅ FASE 2 — MEMORIA
+   Historial de conversación, datos persistentes del usuario,
+   resumen dinámico, memoria explícita por comandos naturales.
+
+✅ FASE 3 — HERRAMIENTAS DE ARCHIVO
+   Crear, leer, editar y borrar archivos con validación
+   de coherencia y edición inteligente.
+
+✅ FASE 4 — EJECUCIÓN DE CÓDIGO
+   Generación de proyectos web y Python, ejecución automática,
+   corrección de errores, puerto dinámico, Three.js para 3D.
+
+✅ FASE 5 — INTERFAZ WEB
+   FastAPI + WebSockets, panel de memoria, lista de proyectos,
+   estética teatral propia.
+
+✅ FASE 6 — SISTEMA DE HERRAMIENTAS DECLARATIVO
+   Herramientas definidas como declaraciones JSON (function calling)
+   para que el modelo decida cuándo usarlas y con qué argumentos.
+   Reemplaza los prompts de clasificación manuales. Escalabilidad real.
+
+✅ FASE 7 — VOZ BIDIRECCIONAL
+   faster-whisper (reconocimiento local, CPU) + Piper TTS (síntesis
+   local, CPU) — GPU libre para Ollama (Fase 13). Push-to-talk desde
+   el navegador vía WebSocket: audio entra como bytes, se transcribe,
+   se procesa como mensaje normal y la respuesta se sintetiza y
+   reproduce en el cliente. CAIN escucha y habla sin depender de
+   APIs externas.
+
+✅ FASE 8 — ONE HUD / THE FACE
+   Rostro 3D reactivo en Three.js: icosaedro deformado por ruido simplex,
+   con normales recalculadas tras la deformación (para que la luz
+   responda a las abolladuras reales) y halo exterior suave. Refleja el
+   estado de CAIN en vivo — listo, pensando, escuchando, ejecutando,
+   hablando — y reacciona al volumen real de su propia voz.
+
+⏳ FASE 9 — CAIN COMO SERVICIO
+   FastAPI completo, accesible desde cualquier dispositivo
+   en la red local. Multi-dispositivo real.
+
+⏳ FASE 10 — CONTROL DEL SISTEMA OPERATIVO
+   Mouse, teclado, aplicaciones, navegador. CAIN actúa
+   directamente sobre el entorno del usuario.
+
+⏳ FASE 11 — MEMORIA AVANZADA
+   Vector database (ChromaDB) para recuperación inteligente
+   por similitud semántica. Recordar como humano.
+
+⏳ FASE 12 — PROACTIVIDAD
+   CAIN toma iniciativa sin que el usuario lo pida.
+   Sugerencias automáticas, anticipación, autonomía real.
+
+⏳ FASE 13 — MODELO LOCAL CON OLLAMA
+   Migración completa a modelo local. CAIN sin internet,
+   sin costos de API, completamente privado.
+
+⏳ FASE 14 — DOMÓTICA E IOT
+   Control de dispositivos inteligentes via Home Assistant.
+   CAIN como cerebro del hogar.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  VISIÓN FINAL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CAIN como cerebro central de un ecosistema inteligente:
+
+  PC              → ejecuta código, gestiona archivos
+  Voz             → escucha y responde en tiempo real
+  Dispositivos    → controla el entorno físico del hogar
+  Red local       → accesible desde cualquier dispositivo
+  Modelo local    → sin dependencia de internet ni APIs
+
+Lo que hace especial a CAIN no es solo lo que hace.
+Es cómo lo hace: con memoria, con criterio, con personalidad.
+
+No es Alexa. No es ChatGPT. Es CAIN.
+
+════════════════════════════════════════════════════════════════
+  Creado por Alejandro Gutierrez Viscay
+  Ingeniería de Sistemas — UCEVA, Tuluá, Colombia
+  github.com/AlejandroGutierrezViscay27
+════════════════════════════════════════════════════════════════
