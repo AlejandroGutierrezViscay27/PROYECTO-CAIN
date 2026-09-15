@@ -117,7 +117,14 @@ async def websocket_endpoint(websocket: WebSocket):
         )
         return future.result(timeout=310)
 
+    def estado_fn(estado):
+        asyncio.run_coroutine_threadsafe(
+            websocket.send_text(json.dumps({"tipo": "estado", "estado": estado})),
+            loop
+        )
+
     cain_agent._confirmar_fn = confirmar_fn
+    cain_agent._estado_fn    = estado_fn
     loop = asyncio.get_event_loop()
 
     async def procesar_mensaje(mensaje, hablar=False):
@@ -208,9 +215,11 @@ async def websocket_endpoint(websocket: WebSocket):
 
     except WebSocketDisconnect:
         cain_agent._confirmar_fn = None
+        cain_agent._estado_fn    = None
     except Exception as e:
         try:
             await websocket.send_text(json.dumps({"tipo": "error", "contenido": str(e)}))
         except Exception:
             pass
         cain_agent._confirmar_fn = None
+        cain_agent._estado_fn    = None

@@ -206,6 +206,9 @@ class Cain:
         if not confirmado:
             return "🎭 Entendido, cancelado. Dime cuando quieras intentarlo de nuevo."
 
+        if hasattr(self, "_estado_fn") and self._estado_fn:
+            self._estado_fn("ejecutando")
+
         resultado, url, info_error = executor.ejecutar_proyecto(nombre_proyecto, archivos, tipo)
 
         if info_error:

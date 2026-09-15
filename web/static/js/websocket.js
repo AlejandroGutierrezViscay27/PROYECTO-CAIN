@@ -42,10 +42,17 @@ function manejarMensaje(data) {
     mostrarTyping();
     setStatus("Pensando...", true);
     bloquearInput(true);
+    setFaceState("pensando");
   }
 
   if (data.tipo === "estado" && data.estado === "escuchando") {
     setStatus("Transcribiendo...", true);
+    setFaceState("escuchando");
+  }
+
+  if (data.tipo === "estado" && data.estado === "ejecutando") {
+    setStatus("Ejecutando...", true);
+    setFaceState("ejecutando");
   }
 
   if (data.tipo === "transcripcion") {
@@ -65,6 +72,7 @@ function manejarMensaje(data) {
     setStatus("En línea", false);
     bloquearInput(false);
     messageInput.focus();
+    setFaceState("listo");
   }
 
   if (data.tipo === "memoria") {
@@ -78,6 +86,7 @@ function manejarMensaje(data) {
     agregarMensaje("cain", `⚠️ ${data.contenido}`);
     setStatus("En línea", false);
     bloquearInput(false);
+    setFaceState("listo");
   }
 }
 
