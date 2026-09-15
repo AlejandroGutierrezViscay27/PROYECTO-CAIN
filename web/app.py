@@ -172,7 +172,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
         if not texto:
             await websocket.send_text(json.dumps({
-                "tipo": "error", "contenido": "No detecté ninguna voz en el audio."
+                "tipo": "respuesta", "contenido": "🎭 Silencio... No escuché nada. Habla cuando quieras."
             }))
             return
 
