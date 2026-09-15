@@ -18,6 +18,10 @@ function conectar() {
   };
 
   state.ws.onmessage = (event) => {
+    if (event.data instanceof Blob) {
+      reproducirAudio(event.data);
+      return;
+    }
     const data = JSON.parse(event.data);
     manejarMensaje(data);
   };
@@ -38,6 +42,14 @@ function manejarMensaje(data) {
     mostrarTyping();
     setStatus("Pensando...", true);
     bloquearInput(true);
+  }
+
+  if (data.tipo === "estado" && data.estado === "escuchando") {
+    setStatus("Transcribiendo...", true);
+  }
+
+  if (data.tipo === "transcripcion") {
+    agregarMensaje("user", data.contenido);
   }
 
   if (data.tipo === "confirmacion") {

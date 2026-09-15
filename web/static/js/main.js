@@ -8,6 +8,13 @@ messageInput.addEventListener("keydown", (e) => {
 
 messageInput.addEventListener("input", autoResize);
 
+// ─── Micrófono — mantener presionado para hablar ─────────────────────────
+micBtn.addEventListener("mousedown", iniciarGrabacion);
+micBtn.addEventListener("mouseup", detenerGrabacion);
+micBtn.addEventListener("mouseleave", detenerGrabacion);
+micBtn.addEventListener("touchstart", (e) => { e.preventDefault(); iniciarGrabacion(); });
+micBtn.addEventListener("touchend", (e) => { e.preventDefault(); detenerGrabacion(); });
+
 // ─── Init ─────────────────────────────────────────────────────────────────
 conectar();
 messageInput.focus();

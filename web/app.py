@@ -19,6 +19,8 @@ load_dotenv()
 
 from core.agent import Cain
 from core.executor import encontrar_puerto_libre
+from voice.stt import FasterWhisperSTT
+from voice.tts import crear_tts
 
 app       = FastAPI()
 templates = Jinja2Templates(directory="web/templates")
@@ -27,6 +29,8 @@ pool      = ThreadPoolExecutor(max_workers=4)
 app.mount("/static", StaticFiles(directory="web/static"), name="static")
 
 cain_agent = Cain()
+stt        = FasterWhisperSTT()
+tts        = crear_tts()
 
 
 @app.get("/")
@@ -116,7 +120,7 @@ async def websocket_endpoint(websocket: WebSocket):
     cain_agent._confirmar_fn = confirmar_fn
     loop = asyncio.get_event_loop()
 
-    async def procesar_mensaje(mensaje):
+    async def procesar_mensaje(mensaje, hablar=False):
         await websocket.send_text(json.dumps({"tipo": "estado", "estado": "pensando"}))
 
         try:
@@ -132,6 +136,13 @@ async def websocket_endpoint(websocket: WebSocket):
             "tipo": "respuesta", "contenido": respuesta, "estado": "listo"
         }))
 
+        if hablar:
+            try:
+                audio = await loop.run_in_executor(pool, tts.sintetizar, respuesta)
+                await websocket.send_bytes(audio)
+            except Exception as e:
+                print(f"[DEBUG] Error de síntesis de voz: {e}")
+
         usuario = cain_agent.usuario_data
         await websocket.send_text(json.dumps({
             "tipo":      "memoria",
@@ -141,9 +152,42 @@ async def websocket_endpoint(websocket: WebSocket):
             "mensajes":  len(cain_agent.historial)
         }))
 
+    async def procesar_audio(audio_bytes):
+        await websocket.send_text(json.dumps({"tipo": "estado", "estado": "escuchando"}))
+
+        try:
+            texto = await loop.run_in_executor(pool, stt.transcribir, audio_bytes)
+        except Exception as e:
+            await websocket.send_text(json.dumps({
+                "tipo": "error", "contenido": f"No pude entender el audio: {e}"
+            }))
+            return
+
+        if not texto:
+            await websocket.send_text(json.dumps({
+                "tipo": "error", "contenido": "No detecté ninguna voz en el audio."
+            }))
+            return
+
+        await websocket.send_text(json.dumps({"tipo": "transcripcion", "contenido": texto}))
+        await procesar_mensaje(texto, hablar=True)
+
     try:
         while True:
-            data     = await websocket.receive_text()
+            mensaje_ws = await websocket.receive()
+            if mensaje_ws["type"] == "websocket.disconnect":
+                raise WebSocketDisconnect(mensaje_ws.get("code", 1000))
+
+            if mensaje_ws.get("bytes") is not None:
+                # Audio de voz — se lanza como tarea aparte por la misma
+                # razón que los mensajes de texto (ver comentario abajo).
+                asyncio.create_task(procesar_audio(mensaje_ws["bytes"]))
+                continue
+
+            data = mensaje_ws.get("text")
+            if not data:
+                continue
+
             payload  = json.loads(data)
             tipo_msg = payload.get("tipo", "mensaje")
 

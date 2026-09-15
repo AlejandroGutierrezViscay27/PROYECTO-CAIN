@@ -445,6 +445,35 @@ html, body {
 .send-btn:hover { background: #e74c3c; box-shadow: 0 0 12px var(--accent-glow); }
 .send-btn:disabled { background: var(--text-muted); cursor: not-allowed; box-shadow: none; }
 
+.mic-btn {
+  width: 36px; height: 36px;
+  border-radius: 4px;
+  border: 1px solid var(--border-light);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: var(--transition);
+  user-select: none;
+}
+
+.mic-btn:hover { border-color: var(--accent-dim); color: var(--text); }
+.mic-btn.recording {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+  box-shadow: 0 0 12px var(--accent-glow);
+  animation: mic-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes mic-pulse {
+  0%, 100% { box-shadow: 0 0 8px var(--accent-glow); }
+  50%      { box-shadow: 0 0 18px var(--accent-glow); }
+}
+
 .input-hint {
   font-size: 10px;
   color: var(--text-muted);
