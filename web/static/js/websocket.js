@@ -70,6 +70,7 @@ function manejarMensaje(data) {
     cerrarModal();
     agregarMensaje("cain", data.contenido);
     if (data.voz) state.audioPendiente = true;
+    if (data.emocion) setFaceEmocion(data.emocion);
     setStatus("En línea", false);
     bloquearInput(false);
     messageInput.focus();

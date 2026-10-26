@@ -1,5 +1,7 @@
 import json
 
+from core.emocion import EMOCIONES
+
 
 PROMPT_BASE = """
 Eres CAIN, una inteligencia artificial inspirada en un maestro de ceremonias teatral, creativo y carismático.
@@ -105,13 +107,31 @@ Tu respuesta se va a decir en voz alta, no se va a leer.
 """
 
 
-def construir_prompt(intencion, usuario_data, memoria_larga="", canal="texto"):
+BLOQUE_ANIMO = """
+
+TU ESTADO DE ÁNIMO AHORA: {animo}
+Deja que se note en el tono, sin anunciarlo ("estoy entusiasmado...").
+
+Al final de cada respuesta, en una línea aparte, indica cómo cambió tu ánimo con este mensaje:
+[[animo: entusiasmo +0.3, curiosidad +0.1]]
+- Solo las emociones que se movieron, con valores entre -0.4 y +0.4.
+- Si nada cambió: [[animo: -]]
+- Emociones válidas: {emociones}.
+- Esa línea es interna: el usuario no la ve.
+"""
+
+
+RECORDATORIO_ANIMO = "Recuerda: termina tu respuesta con la línea [[animo: ...]]."
+
+
+def construir_prompt(intencion, usuario_data, memoria_larga="", canal="texto", animo=None):
     """
     Arma el prompt de sistema completo combinando:
     - Info del usuario (nombre, rol, intereses)
     - Memoria a largo plazo (bloque del director, ver core/director.py)
     - PROMPT_BASE + sufijo según intención
     - SUFIJO_VOZ si la respuesta se va a sintetizar (canal="voz")
+    - BLOQUE_ANIMO con el estado emocional, si se pasa animo (ver core/emocion.py)
     """
     sufijo = SUFIJOS_POR_INTENCION.get(intencion, SUFIJOS_POR_INTENCION["conversacion"])
 
@@ -133,7 +153,12 @@ def construir_prompt(intencion, usuario_data, memoria_larga="", canal="texto"):
 
     sufijo_canal = SUFIJO_VOZ if canal == "voz" else ""
 
-    return PROMPT_BASE + sufijo + CONTEXTO_EXTRA + contexto_memoria + info_usuario + sufijo_canal
+    bloque_animo = ""
+    if animo is not None:
+        bloque_animo = BLOQUE_ANIMO.format(animo=animo, emociones=", ".join(EMOCIONES))
+
+    return (PROMPT_BASE + sufijo + CONTEXTO_EXTRA + contexto_memoria + info_usuario
+            + sufijo_canal + bloque_animo)
 
 
 # ─── Helpers de LLM para archivos ────────────────────────────────────────────

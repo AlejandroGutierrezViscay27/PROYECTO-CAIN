@@ -2,7 +2,7 @@ from llm.openai_provider import OpenAIProvider
 # Cuando migres a Ollama, cambia la línea de arriba por esta:
 # from llm.ollama_provider import OllamaProvider
 
-from core import memory, tools, intent, prompts, executor, director
+from core import memory, tools, intent, prompts, executor, director, emocion
 from core.tool_schemas import TOOLS, PROMPT_ENRUTADOR
 import copy
 import os
@@ -26,6 +26,10 @@ class Cain:
         self.historial      = memory.cargar_memoria()
         self.usuario_data   = memory.cargar_usuario()
         self.memoria_larga  = memory.cargar_memoria_larga()
+        # Ánimo de CAIN: colorea el tono, La Cara y la prosodia de la voz.
+        # Vive en memoria (no en disco): decae solo, así que tras reiniciar
+        # simplemente arranca neutral.
+        self.emocion        = emocion.EstadoEmocional()
         self.ultimo_archivo = None
         # Mensajes añadidos al historial desde la última pasada del director.
         # No se puede deducir de len(historial): el historial se trunca a
@@ -157,6 +161,7 @@ class Cain:
 
         if objetivo == "todo":
             self.usuario_data = {}
+            self.emocion.reiniciar()
             memory.guardar_usuario(self.usuario_data)
             self._olvidar_conversaciones()
             return "🧠 Hecho. He olvidado todo lo que sabía de ti."
@@ -246,15 +251,29 @@ class Cain:
         self._actualizar_usuario(mensaje_usuario)
 
         prompt_sistema = prompts.construir_prompt(
-            intencion, self.usuario_data, director.bloque_para_prompt(self.memoria_larga), canal
+            intencion, self.usuario_data, director.bloque_para_prompt(self.memoria_larga), canal,
+            animo=self.emocion.describir(),
         )
 
         self.historial.append({"role": "user", "content": mensaje_usuario})
-        mensajes = [{"role": "system", "content": prompt_sistema}] + self.historial
+        mensajes = (
+            [{"role": "system", "content": prompt_sistema}]
+            + self.historial
+            # Recordatorio al final: con un historial largo, la instrucción del
+            # prompt de sistema queda lejos y el modelo deja de poner la etiqueta.
+            + [{"role": "system", "content": prompts.RECORDATORIO_ANIMO}]
+        )
 
-        respuesta_texto = self.llm.chat(mensajes, temperature=0.7)
+        respuesta_cruda = self.llm.chat(mensajes, temperature=0.7)
+        respuesta_texto, deltas = emocion.extraer_animo(respuesta_cruda)
+        aplicados = self.emocion.aplicar(deltas)
+        if aplicados:
+            print(f"[DEBUG] Animo: {aplicados} -> {self.emocion.describir()}")
 
-        self.historial.append({"role": "assistant", "content": respuesta_texto})
+        # El historial guarda la respuesta CON la etiqueta: si no la ve en sus
+        # respuestas anteriores, el modelo deja de ponerla. Al usuario, a la voz
+        # y al director les llega siempre sin ella.
+        self.historial.append({"role": "assistant", "content": respuesta_cruda})
         self.historial = memory.truncar_historial(self.historial)
         memory.guardar_memoria(self.historial)
 

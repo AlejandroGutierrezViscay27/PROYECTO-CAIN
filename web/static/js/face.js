@@ -2,7 +2,8 @@
 // Un icosaedro deformado por ruido simplex, con normales recalculadas tras
 // la deformación (para que la luz responda a las abolladuras reales, no a
 // la esfera lisa original) y un halo exterior para dar profundidad.
-// setFaceState() es la única API pública que usan websocket.js y voice.js.
+// setFaceState() y setFaceEmocion() son la única API pública que usan
+// websocket.js y voice.js.
 
 const FACE_PRESETS = {
   listo:      { color: 0x7b241c, amplitude: 0.07, frequency: 1.1, speed: 0.18 },
@@ -11,6 +12,24 @@ const FACE_PRESETS = {
   ejecutando: { color: 0xe74c3c, amplitude: 0.30, frequency: 3.2, speed: 1.5  },
   hablando:   { color: 0xc0392b, amplitude: 0.14, frequency: 1.8, speed: 0.55 },
 };
+
+// Ánimo de CAIN (core/emocion.py): a intensidad máxima, el color al que se
+// tiñe y cuánto multiplica amplitud, frecuencia y velocidad del preset.
+// Solo se aplica en FACE_ESTADOS_CON_EMOCION: pensando, escuchando y
+// ejecutando son señales del sistema y se quedan reconocibles.
+const FACE_EMOCIONES = {
+  entusiasmo:   { color: 0xe67e22, amplitud: 1.5, frecuencia: 1.1, velocidad: 1.8 },
+  alegria:      { color: 0xe0a030, amplitud: 1.25, frecuencia: 1.0, velocidad: 1.3 },
+  curiosidad:   { color: 0x8e44ad, amplitud: 1.1, frecuencia: 1.5, velocidad: 1.2 },
+  orgullo:      { color: 0xb9770e, amplitud: 1.3, frecuencia: 0.9, velocidad: 0.9 },
+  picardia:     { color: 0xc2185b, amplitud: 1.25, frecuencia: 1.35, velocidad: 1.4 },
+  calma:        { color: 0x5d6d7e, amplitud: 0.6, frecuencia: 0.8, velocidad: 0.55 },
+  sorpresa:     { color: 0xf0e6d2, amplitud: 1.7, frecuencia: 1.2, velocidad: 1.9 },
+  preocupacion: { color: 0x34495e, amplitud: 0.9, frecuencia: 1.7, velocidad: 1.3 },
+  frustracion:  { color: 0x922b21, amplitud: 1.6, frecuencia: 1.9, velocidad: 1.5 },
+  tristeza:     { color: 0x2e4053, amplitud: 0.7, frecuencia: 0.8, velocidad: 0.45 },
+};
+const FACE_ESTADOS_CON_EMOCION = new Set(["listo", "hablando"]);
 
 const FACE_NOISE_GLSL = `
   vec3 mod289(vec3 x){return x-floor(x*(1.0/289.0))*289.0;}
@@ -218,10 +237,36 @@ function ajustarTamanoFace(contenedor) {
   faceCamera.updateProjectionMatrix();
 }
 
+let faceEmocion = { nombre: "neutral", intensidad: 0 };
+
+// Preset del estado actual, teñido por el ánimo si el estado lo admite.
+function objetivoFace() {
+  const base = FACE_PRESETS[faceEstadoActual];
+  const emo  = FACE_EMOCIONES[faceEmocion.nombre];
+  if (!emo || !FACE_ESTADOS_CON_EMOCION.has(faceEstadoActual) || typeof THREE === "undefined") {
+    return base;
+  }
+  const k      = Math.max(0, Math.min(1, faceEmocion.intensidad));
+  const escala = (valor, factor) => valor * (1 + (factor - 1) * k);
+  return {
+    color:     new THREE.Color(base.color).lerp(new THREE.Color(emo.color), 0.75 * k).getHex(),
+    amplitude: escala(base.amplitude, emo.amplitud),
+    frequency: escala(base.frequency, emo.frecuencia),
+    speed:     escala(base.speed,     emo.velocidad),
+  };
+}
+
 function setFaceState(estado) {
   if (!FACE_PRESETS[estado] || estado === faceEstadoActual) return;
   faceEstadoActual = estado;
-  faceTarget       = FACE_PRESETS[estado];
+  faceTarget       = objetivoFace();
+}
+
+function setFaceEmocion(emocion) {
+  faceEmocion = emocion && FACE_EMOCIONES[emocion.nombre]
+    ? { nombre: emocion.nombre, intensidad: Number(emocion.intensidad) || 0 }
+    : { nombre: "neutral", intensidad: 0 };
+  faceTarget = objetivoFace();
 }
 
 function animarFace() {

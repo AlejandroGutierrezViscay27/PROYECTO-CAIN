@@ -20,6 +20,8 @@ import json
 import re
 import time
 
+from core.emocion import extraer_animo
+
 CLAVES_GUIA = ("lectura_usuario", "necesidades", "como_ayudar", "riesgos",
                "proximo_foco", "temas_proactivos")
 
@@ -72,7 +74,10 @@ Responde SOLO con JSON, sin texto alrededor:
 
 def _formatear_conversacion(mensajes):
     etiquetas = {"user": "Usuario", "assistant": "CAIN"}
-    return "\n".join(f"{etiquetas.get(m['role'], m['role'])}: {m['content']}" for m in mensajes)
+    # El historial guarda la etiqueta [[animo: ...]] (ver agent._conversar); aquí sobra.
+    return "\n".join(
+        f"{etiquetas.get(m['role'], m['role'])}: {extraer_animo(m['content'])[0]}" for m in mensajes
+    )
 
 
 def _formatear_perfil(usuario_data):

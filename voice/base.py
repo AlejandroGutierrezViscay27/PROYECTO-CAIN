@@ -29,12 +29,15 @@ class TextToSpeech(ABC):
     """
 
     @abstractmethod
-    def sintetizar(self, texto: str) -> bytes:
+    def sintetizar(self, texto: str, emocion: str = "neutral", intensidad: float = 0.0) -> bytes:
         """
         Sintetiza texto a audio.
 
         Args:
-            texto: Texto a convertir en habla.
+            texto:      Texto a convertir en habla.
+            emocion:    Emoción dominante de CAIN (ver core/emocion.py). Cada motor
+                        la usa como pueda; uno que no la soporte la ignora.
+            intensidad: Intensidad de esa emoción, de 0 a 1.
 
         Returns:
             Audio en formato WAV (bytes).
