@@ -52,6 +52,17 @@ async def get_memory():
     })
 
 
+@app.get("/api/uso")
+async def get_uso():
+    """Gasto del LLM por rol y modelo: hoy y desde que hay registro."""
+    registro = cain_agent.registro_uso
+    return JSONResponse({
+        "modelos": {rol: f"{llm.proveedor}:{llm.model}" for rol, llm in cain_agent.llms.items()},
+        "hoy":     registro.resumen_hoy(),
+        "total":   registro.resumen(),
+    })
+
+
 @app.get("/api/proyectos")
 async def get_proyectos():
     carpeta = "proyectos"

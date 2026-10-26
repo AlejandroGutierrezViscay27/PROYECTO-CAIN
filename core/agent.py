@@ -1,6 +1,5 @@
-from llm.openai_provider import OpenAIProvider
-# Cuando migres a Ollama, cambia la línea de arriba por esta:
-# from llm.ollama_provider import OllamaProvider
+from llm.fabrica import crear_llms
+from llm.registro import RegistroUso
 
 from core import memory, tools, intent, prompts, executor, director, emocion
 from core.tool_schemas import TOOLS, PROMPT_ENRUTADOR
@@ -19,9 +18,11 @@ class Cain:
     """
 
     def __init__(self):
-        self.llm            = OpenAIProvider()
-        # Cuando migres a Ollama:
-        # self.llm = OllamaProvider(model="llama3")
+        # Un LLM por rol (ver llm/fabrica.py): se configuran en el .env con
+        # LLM_PROVIDER_<ROL> / LLM_MODEL_<ROL>. self.llm es el de conversación.
+        self.registro_uso   = RegistroUso()
+        self.llms           = crear_llms(self.registro_uso)
+        self.llm            = self.llms["conversacion"]
 
         self.historial      = memory.cargar_memoria()
         self.usuario_data   = memory.cargar_usuario()
@@ -65,7 +66,7 @@ class Cain:
         formato, porque se va a sintetizar.
         """
 
-        resultado = self.llm.chat_with_tools(
+        resultado = self.llms["enrutador"].chat_with_tools(
             [
                 {"role": "system", "content": PROMPT_ENRUTADOR},
                 {"role": "user",   "content": mensaje_usuario},
@@ -125,7 +126,7 @@ class Cain:
             return f"🎭 El archivo '{nombre}' no existe aún... ¿quieres que lo cree primero?"
 
         instruccion = argumentos.get("instruccion", "")
-        if not intent.es_misma_intencion_archivo(nombre, instruccion, self.llm):
+        if not intent.es_misma_intencion_archivo(nombre, instruccion, self.llms["intencion"]):
             return "🎭 Esto no parece encajar con el archivo actual... puedo crear uno nuevo si quieres."
         resultado = self._editar_archivo_inteligente(nombre, instruccion)
         self.ultimo_archivo = nombre
@@ -139,7 +140,7 @@ class Cain:
             return f"Error en edición: {str(e)}"
 
         nuevo_contenido = prompts.generar_edicion_archivo(
-            self.llm, contenido_actual, instruccion_usuario
+            self.llms["codigo"], contenido_actual, instruccion_usuario
         )
         return tools.editar_archivo(nombre, nuevo_contenido)
 
@@ -199,7 +200,7 @@ class Cain:
         tipo        = argumentos.get("tipo", "otro")
         print(f"[DEBUG] Tipo de proyecto: {tipo}")
 
-        plan            = prompts.generar_plan_proyecto(self.llm, descripcion, tipo)
+        plan            = prompts.generar_plan_proyecto(self.llms["codigo"], descripcion, tipo)
         nombre_proyecto = plan.get("nombre", "proyecto_cain")
         archivos        = plan.get("archivos", {})
 
@@ -236,7 +237,7 @@ class Cain:
 
         if info_error:
             ruta_archivo, error = info_error
-            resultado = executor.corregir_y_reintentar(self.llm, ruta_archivo, error, resultado)
+            resultado = executor.corregir_y_reintentar(self.llms["codigo"], ruta_archivo, error, resultado)
 
         if url:
             return f"🎭 ¡El espectáculo está en vivo!\n\n{resultado}"
@@ -264,7 +265,7 @@ class Cain:
             + [{"role": "system", "content": prompts.RECORDATORIO_ANIMO}]
         )
 
-        respuesta_cruda = self.llm.chat(mensajes, temperature=0.7)
+        respuesta_cruda = self.llms["conversacion"].chat(mensajes, temperature=0.7)
         respuesta_texto, deltas = emocion.extraer_animo(respuesta_cruda)
         aplicados = self.emocion.aplicar(deltas)
         if aplicados:
@@ -309,7 +310,7 @@ class Cain:
 
     def _correr_director(self, memoria, perfil, nuevos, generacion):
         try:
-            resultado = director.llamar_director(self.llm, memoria, perfil, nuevos)
+            resultado = director.llamar_director(self.llms["director"], memoria, perfil, nuevos)
         except Exception as e:
             # La memoria es "mejor esfuerzo": un fallo aquí nunca tumba la conversación.
             print(f"[DEBUG] Director de memoria falló: {e}")
@@ -341,7 +342,7 @@ class Cain:
     # ─── Detección (delega en intent) ────────────────────────────────────────
 
     def _detectar_intencion(self, mensaje_usuario):
-        return intent.detectar_intencion_llm(mensaje_usuario, self.llm)
+        return intent.detectar_intencion_llm(mensaje_usuario, self.llms["intencion"])
 
     # ─── Actualización de datos del usuario ──────────────────────────────────
 
@@ -358,7 +359,7 @@ class Cain:
             memory.guardar_usuario(self.usuario_data)
             print(f"[DEBUG] Rol guardado: {rol}")
 
-        intereses = intent.detectar_intereses_llm(mensaje_usuario, self.llm)
+        intereses = intent.detectar_intereses_llm(mensaje_usuario, self.llms["intencion"])
         if intereses:
             if "intereses" not in self.usuario_data:
                 self.usuario_data["intereses"] = []

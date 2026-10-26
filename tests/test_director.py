@@ -6,6 +6,7 @@ import unittest
 from unittest import mock
 
 from core import agent as agent_mod
+from tests import mismo_llm_para_todos
 from core import director, memory
 
 RESPUESTA_DIRECTOR = {
@@ -54,7 +55,7 @@ class BaseAgente(unittest.TestCase):
         # Nada de disco ni de red.
         self.guardar_larga = mock.MagicMock()
         parches = [
-            mock.patch.object(agent_mod, "OpenAIProvider", LLMFalso),
+            mock.patch.object(agent_mod, "crear_llms", mismo_llm_para_todos(LLMFalso)),
             mock.patch.object(memory, "cargar_memoria", return_value=[]),
             mock.patch.object(memory, "cargar_usuario", return_value={}),
             mock.patch.object(memory, "cargar_memoria_larga", side_effect=memory.memoria_larga_vacia),

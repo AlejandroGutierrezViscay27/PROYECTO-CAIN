@@ -2,6 +2,7 @@ import unittest
 from unittest import mock
 
 from core import agent as agent_mod
+from tests import mismo_llm_para_todos
 from core import emocion, memory
 from core.emocion import EstadoEmocional, extraer_animo
 from voice.tts import PROSODIA_NEUTRAL, PROSODIA_POR_EMOCION, parametros_prosodia
@@ -106,7 +107,7 @@ class TestAnimoEnElAgente(unittest.TestCase):
 
     def setUp(self):
         parches = [
-            mock.patch.object(agent_mod, "OpenAIProvider", LLMConAnimo),
+            mock.patch.object(agent_mod, "crear_llms", mismo_llm_para_todos(LLMConAnimo)),
             mock.patch.object(memory, "cargar_memoria", return_value=[]),
             mock.patch.object(memory, "cargar_usuario", return_value={}),
             mock.patch.object(memory, "cargar_memoria_larga", side_effect=memory.memoria_larga_vacia),
