@@ -82,8 +82,19 @@ CAIN ya es un agente funcional con las siguientes capacidades:
 
   MEMORIA EN TRES CAPAS
   ✦ Corto plazo   → historial de los últimos 30 mensajes
-  ✦ Largo plazo   → datos del usuario (nombre, intereses, notas)
-  ✦ Resumen       → síntesis dinámica generada cada 10 mensajes
+  ✦ Perfil        → datos explícitos del usuario (nombre, intereses, notas)
+  ✦ Largo plazo   → mantenida por el DIRECTOR DE MEMORIA (ver abajo)
+
+  DIRECTOR DE MEMORIA
+  ✦ Cada 10 mensajes, una pasada aparte del LLM — en segundo plano,
+    sin retrasar la respuesta — relee la memoria y la conversación
+  ✦ Hechos   → datos duraderos del usuario. El director solo añade
+    o marca obsoletos por número; nunca reescribe la lista, así que
+    no puede "olvidar" un dato sin querer
+  ✦ Notas    → en qué anda el usuario ahora (versionadas)
+  ✦ Temas abiertos y eventos cerrados (archivados, no borrados)
+  ✦ Guía estratégica → cómo ayudarle, riesgos, próximo foco
+  ✦ Escritura atómica: un corte a mitad no deja un JSON roto
 
   MEMORIA EXPLÍCITA
   ✦ "recuerda que prefiero código comentado"  → guarda la nota
@@ -109,9 +120,32 @@ CAIN ya es un agente funcional con las siguientes capacidades:
   ✦ Estética teatral oscura — identidad visual propia
 
   VOZ BIDIRECCIONAL
-  ✦ Push-to-talk: graba audio en el navegador y lo envía por WebSocket
+  ✦ Push-to-talk o MANOS LIBRES: detección de voz (VAD) por energía
+    con piso de ruido adaptativo — CAIN sabe solo cuándo empiezas
+    y terminas de hablar
+  ✦ Barge-in: si le hablas mientras habla, se calla y te escucha
+  ✦ El navegador envía WAV 16 kHz listo para Whisper (sin ffmpeg)
   ✦ Transcripción local con faster-whisper (sin APIs externas)
   ✦ Respuesta sintetizada con Piper TTS y reproducida en el cliente
+  ✦ Prompt de canal: por voz responde corto y sin formato
+  ✦ Limpieza para voz: nada de emojis, markdown, código ni URLs
+    leídos en voz alta
+
+  ESTADO DE ÁNIMO
+  ✦ 10 emociones (entusiasmo, alegría, curiosidad, orgullo, picardía,
+    calma, sorpresa, preocupación, frustración, tristeza)
+  ✦ El modelo cierra cada respuesta con una etiqueta interna
+    [[animo: ...]] — sin llamadas extra al LLM
+  ✦ Decaen solas con el tiempo; las negativas, 3 veces más rápido
+  ✦ Colorean el tono de la respuesta, La Cara y la prosodia de Piper
+    (curva S: una emoción suave casi no se nota, una fuerte sí)
+
+  UN LLM POR ROL
+  ✦ Conversación, enrutador, intención, director y código pueden ir
+    cada uno con su propio proveedor y modelo (OpenAI u Ollama),
+    configurado en el .env
+  ✦ Registro de gasto: llamadas, tokens y costo estimado por día,
+    rol y modelo (data/uso_llm.json, GET /api/uso)
 
   LA CARA
   ✦ Rostro 3D reactivo (Three.js) que refleja el estado de CAIN en vivo
@@ -120,6 +154,7 @@ CAIN ya es un agente funcional con las siguientes capacidades:
   ✦ Halo exterior suave y reacción al volumen real de su propia voz
     (Web Audio API) mientras habla
   ✦ Estados: listo, pensando, escuchando, ejecutando, hablando
+  ✦ En listo y hablando se tiñe y mueve según el ánimo de CAIN
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -129,7 +164,9 @@ CAIN ya es un agente funcional con las siguientes capacidades:
 cain/
 ├── core/
 │   ├── agent.py      → clase Cain, orquesta todos los módulos
-│   ├── memory.py     → gestión de las 3 capas de memoria
+│   ├── memory.py     → persistencia de memoria (escritura atómica)
+│   ├── director.py   → director de memoria a largo plazo
+│   ├── emocion.py    → estado de ánimo de CAIN
 │   ├── tools.py      → operaciones sobre archivos
 │   ├── intent.py     → detección de intención y acción
 │   ├── prompts.py    → construcción del prompt dinámico
@@ -137,13 +174,16 @@ cain/
 │
 ├── llm/
 │   ├── base.py            → clase abstracta LLMProvider
-│   ├── openai_provider.py → implementación OpenAI
-│   └── ollama_provider.py → preparado para modelo local
+│   ├── openai_provider.py → implementación OpenAI (y APIs compatibles)
+│   ├── ollama_provider.py → modelo local vía Ollama
+│   ├── fabrica.py         → un LLM por rol, según el .env
+│   └── registro.py        → registro de tokens y gasto
 │
 ├── voice/
 │   ├── base.py            → clases abstractas SpeechToText / TextToSpeech
 │   ├── stt.py             → FasterWhisperSTT (reconocimiento local, CPU)
-│   └── tts.py             → PiperTTS / APITTS (síntesis, según TTS_PROVIDER)
+│   ├── tts.py             → PiperTTS / APITTS (síntesis, según TTS_PROVIDER)
+│   └── limpieza.py        → deja el texto listo para decirse en voz alta
 │
 ├── web/
 │   ├── app.py             → servidor FastAPI + WebSockets
@@ -156,6 +196,7 @@ cain/
 │
 ├── data/                  → memoria en runtime (no en git)
 ├── proyectos/             → proyectos generados (no en git)
+├── tests/                 → pruebas (unittest; nunca tocan data/)
 ├── main.py                → punto de entrada (web o terminal)
 ├── .env                   → configuración y API keys
 └── requirements.txt       → dependencias del proyecto
@@ -163,10 +204,16 @@ cain/
 DECISIÓN DE DISEÑO CLAVE — Capa LLM Abstracta:
 
   CAIN no conoce a OpenAI ni a Ollama directamente.
-  Solo habla con LLMProvider. Cambiar de modelo es una línea:
+  Solo habla con LLMProvider, y cada tarea pide el suyo por rol.
+  Cambiar de modelo no toca código, solo el .env:
 
-    self.llm = OpenAIProvider()      ← actual
-    self.llm = OllamaProvider(...)   ← futuro (modelo local)
+    LLM_MODEL=gpt-4o-mini              ← general (default)
+    LLM_PROVIDER_DIRECTOR=ollama       ← el director, local
+    LLM_MODEL_DIRECTOR=qwen2.5:7b
+    LLM_MODEL_CODIGO=gpt-4.1           ← el código, un modelo más fuerte
+
+  Roles: CONVERSACION, ENRUTADOR, INTENCION, DIRECTOR, CODIGO.
+  Un rol sin variables propias usa las generales.
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -182,9 +229,14 @@ DECISIÓN DE DISEÑO CLAVE — Capa LLM Abstracta:
   ✦ Jinja2              → templates HTML
 
   INTELIGENCIA ARTIFICIAL
-  ✦ OpenAI API (gpt-4o-mini) → modelo actual
-  ✦ Ollama               → destino de migración (modelo local)
-  ✦ llama3.1:8b          → modelo recomendado para Ollama
+  ✦ OpenAI API (gpt-4o-mini) → modelo por defecto en todos los roles
+  ✦ Ollama               → modelo local, ya seleccionable por rol
+  ✦ llama3.1:8b / qwen2.5:7b → modelos recomendados para Ollama
+                           (con function calling, necesario para el enrutador)
+
+  VOZ
+  ✦ faster-whisper (small, CPU int8) → reconocimiento en español
+  ✦ Piper (es_MX)        → síntesis local con prosodia por emoción
 
   FRONTEND
   ✦ HTML5 + CSS3 + JavaScript vanilla
@@ -240,6 +292,15 @@ DECISIÓN DE DISEÑO CLAVE — Capa LLM Abstracta:
    estado de CAIN en vivo — listo, pensando, escuchando, ejecutando,
    hablando — y reacciona al volumen real de su propia voz.
 
+✅ FASE 8.5 — MEJORAS INSPIRADAS EN OPENSAKURA
+   Tras comparar CAIN con OpenSakura se portaron sus ideas (no sus
+   motores: SenseVoice y GPT-SoVITS no hablan español y exigen CUDA):
+   voz sin emojis ni markdown y prompt de canal; manos libres con VAD,
+   barge-in y WAV 16 kHz desde el navegador; director de memoria con
+   hechos que no se pierden y escritura atómica; estado de ánimo que
+   llega a La Cara y a la prosodia de Piper; y un LLM por rol con
+   registro de gasto.
+
 ⏳ FASE 9 — CAIN COMO SERVICIO
    FastAPI completo, accesible desde cualquier dispositivo
    en la red local. Multi-dispositivo real.
@@ -259,6 +320,8 @@ DECISIÓN DE DISEÑO CLAVE — Capa LLM Abstracta:
 ⏳ FASE 13 — MODELO LOCAL CON OLLAMA
    Migración completa a modelo local. CAIN sin internet,
    sin costos de API, completamente privado.
+   Base lista desde la Fase 8.5: los roles pueden pasar a Ollama
+   uno por uno, empezando por los de fondo (director, intención).
 
 ⏳ FASE 14 — DOMÓTICA E IOT
    Control de dispositivos inteligentes via Home Assistant.
