@@ -491,6 +491,12 @@ html, body {
   animation: mic-pulse 1.2s ease-in-out infinite;
 }
 
+.vad-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+
 @keyframes mic-pulse {
   0%, 100% { box-shadow: 0 0 8px var(--accent-glow); }
   50%      { box-shadow: 0 0 18px var(--accent-glow); }

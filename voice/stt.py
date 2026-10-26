@@ -1,10 +1,32 @@
 import io
+import wave
+
+import numpy as np
 from faster_whisper import WhisperModel
 from voice.base import SpeechToText
 
 MODEL_SIZE    = "small"
 DEVICE        = "cpu"
 COMPUTE_TYPE  = "int8"
+FRECUENCIA    = 16000   # la que espera Whisper
+
+
+def wav_a_muestras(audio_bytes: bytes):
+    """
+    Si el audio es WAV PCM 16-bit mono a 16 kHz (lo que manda el navegador),
+    lo convierte directo a float32 en [-1, 1] sin pasar por el decodificador.
+    Retorna None para cualquier otro formato.
+    """
+    if audio_bytes[:4] != b"RIFF":
+        return None
+    try:
+        with wave.open(io.BytesIO(audio_bytes), "rb") as wav:
+            if (wav.getframerate(), wav.getnchannels(), wav.getsampwidth()) != (FRECUENCIA, 1, 2):
+                return None
+            pcm = wav.readframes(wav.getnframes())
+    except wave.Error:
+        return None
+    return np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
 
 
 class FasterWhisperSTT(SpeechToText):
@@ -17,7 +39,7 @@ class FasterWhisperSTT(SpeechToText):
         self.model = WhisperModel(model_size, device=device, compute_type=compute_type)
 
     def transcribir(self, audio_bytes: bytes) -> str:
-        segmentos, _ = self.model.transcribe(
-            io.BytesIO(audio_bytes), language="es", vad_filter=True
-        )
+        muestras = wav_a_muestras(audio_bytes)
+        entrada  = muestras if muestras is not None else io.BytesIO(audio_bytes)
+        segmentos, _ = self.model.transcribe(entrada, language="es", vad_filter=True)
         return " ".join(seg.text.strip() for seg in segmentos).strip()

@@ -69,10 +69,17 @@ function manejarMensaje(data) {
     quitarTyping();
     cerrarModal();
     agregarMensaje("cain", data.contenido);
+    if (data.voz) state.audioPendiente = true;
     setStatus("En línea", false);
     bloquearInput(false);
     messageInput.focus();
     setFaceState("listo");
+  }
+
+  if (data.tipo === "sin_audio") {
+    // La síntesis falló: no va a llegar el audio que anunció la respuesta.
+    state.audioPendiente = false;
+    state.descartarAudio = false;
   }
 
   if (data.tipo === "memoria") {

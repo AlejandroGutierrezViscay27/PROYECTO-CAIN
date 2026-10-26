@@ -141,19 +141,24 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.send_text(json.dumps({"tipo": "error", "contenido": str(e)}))
             return
 
-        await websocket.send_text(json.dumps({
-            "tipo": "respuesta", "contenido": respuesta, "estado": "listo"
-        }))
-
         # El chat muestra la respuesta tal cual; a la voz le llega sin
         # emojis, markdown ni código (Piper los leería como basura).
         texto_voz = limpiar_para_voz(respuesta) if hablar else ""
+
+        # "voz" avisa al cliente de que viene audio detrás: así sabe que CAIN
+        # va a hablar (umbral de eco del VAD, barge-in) antes de que llegue.
+        await websocket.send_text(json.dumps({
+            "tipo": "respuesta", "contenido": respuesta, "estado": "listo",
+            "voz": bool(texto_voz),
+        }))
+
         if texto_voz:
             try:
                 audio = await loop.run_in_executor(pool, tts.sintetizar, texto_voz)
                 await websocket.send_bytes(audio)
             except Exception as e:
                 print(f"[DEBUG] Error de síntesis de voz: {e}")
+                await websocket.send_text(json.dumps({"tipo": "sin_audio"}))
 
         usuario = cain_agent.usuario_data
         await websocket.send_text(json.dumps({

@@ -15,6 +15,9 @@ micBtn.addEventListener("mouseleave", detenerGrabacion);
 micBtn.addEventListener("touchstart", (e) => { e.preventDefault(); iniciarGrabacion(); });
 micBtn.addEventListener("touchend", (e) => { e.preventDefault(); detenerGrabacion(); });
 
+// ─── Manos libres — clic para activar/desactivar ─────────────────────────
+vadBtn.addEventListener("click", alternarManosLibres);
+
 // ─── Init ─────────────────────────────────────────────────────────────────
 conectar();
 messageInput.focus();
