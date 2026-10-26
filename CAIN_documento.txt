@@ -161,16 +161,17 @@ CAIN ya es un agente funcional con las siguientes capacidades:
   ARQUITECTURA Y ESTRUCTURA
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-cain/
+PROYECTO-CAIN/
 ├── core/
-│   ├── agent.py      → clase Cain, orquesta todos los módulos
-│   ├── memory.py     → persistencia de memoria (escritura atómica)
-│   ├── director.py   → director de memoria a largo plazo
-│   ├── emocion.py    → estado de ánimo de CAIN
-│   ├── tools.py      → operaciones sobre archivos
-│   ├── intent.py     → detección de intención y acción
-│   ├── prompts.py    → construcción del prompt dinámico
-│   └── executor.py   → ejecución de código y proyectos
+│   ├── agent.py        → clase Cain, orquesta todos los módulos
+│   ├── memory.py       → persistencia de memoria (escritura atómica)
+│   ├── director.py     → director de memoria a largo plazo
+│   ├── emocion.py      → estado de ánimo de CAIN
+│   ├── tools.py        → operaciones sobre archivos
+│   ├── tool_schemas.py → declaraciones JSON de las herramientas (Fase 6)
+│   ├── intent.py       → detección de intención y acción
+│   ├── prompts.py      → construcción del prompt dinámico
+│   └── executor.py     → ejecución de código y proyectos
 │
 ├── llm/
 │   ├── base.py            → clase abstracta LLMProvider

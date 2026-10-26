@@ -23,3 +23,5 @@ proyectos/
 !README.md
 !requirements.txt
 !CAIN_documento.txt
+# Caché local de Graphify (se regenera)
+graphify-out/cache/
