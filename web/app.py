@@ -47,7 +47,7 @@ async def get_memory():
         "rol":       usuario.get("rol", None),
         "intereses": usuario.get("intereses", []),
         "notas":     usuario.get("notas", []),
-        "resumen":   cain_agent.resumen or None,
+        "resumen":   cain_agent.memoria_larga.get("notas") or None,
         "mensajes":  len(cain_agent.historial)
     })
 

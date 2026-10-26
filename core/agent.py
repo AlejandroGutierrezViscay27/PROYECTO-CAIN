@@ -2,12 +2,14 @@ from llm.openai_provider import OpenAIProvider
 # Cuando migres a Ollama, cambia la línea de arriba por esta:
 # from llm.ollama_provider import OllamaProvider
 
-from core import memory, tools, intent, prompts, executor
+from core import memory, tools, intent, prompts, executor, director
 from core.tool_schemas import TOOLS, PROMPT_ENRUTADOR
+import copy
 import os
+import threading
 
-# Cada cuántos mensajes nuevos (usuario + CAIN) se actualiza el resumen.
-INTERVALO_RESUMEN = 10
+# Cada cuántos mensajes nuevos (usuario + CAIN) pasa el director de memoria.
+INTERVALO_DIRECTOR = 10
 
 
 class Cain:
@@ -23,12 +25,20 @@ class Cain:
 
         self.historial      = memory.cargar_memoria()
         self.usuario_data   = memory.cargar_usuario()
-        self.resumen        = memory.cargar_resumen()
+        self.memoria_larga  = memory.cargar_memoria_larga()
         self.ultimo_archivo = None
-        # Mensajes añadidos al historial desde el último resumen. No se puede
-        # deducir de len(historial): el historial se trunca a MAX_HISTORIAL y
-        # se queda fijo en ese tamaño.
+        # Mensajes añadidos al historial desde la última pasada del director.
+        # No se puede deducir de len(historial): el historial se trunca a
+        # MAX_HISTORIAL y se queda fijo en ese tamaño.
         self.mensajes_sin_resumir = 0
+
+        # El director corre en un hilo aparte para no retrasar la respuesta.
+        # La generación sube con cada "olvida": si el director termina después
+        # de un olvido, su resultado (de una memoria que ya no existe) se tira.
+        self._lock_memoria       = threading.Lock()
+        self._generacion_memoria = 0
+        self._director_activo    = False
+        self._hilo_director      = None
 
         self._herramientas = {
             "crear_archivo":     self._crear_archivo,
@@ -132,7 +142,7 @@ class Cain:
     # ─── Memoria explícita ───────────────────────────────────────────────────
 
     def _memoria_consultar(self, argumentos):
-        return memory.consultar_memoria(self.usuario_data, self.resumen)
+        return memory.consultar_memoria(self.usuario_data, self.memoria_larga)
 
     def _memoria_recordar(self, argumentos):
         contenido = argumentos.get("contenido", "").strip().lower()
@@ -148,17 +158,11 @@ class Cain:
         if objetivo == "todo":
             self.usuario_data = {}
             memory.guardar_usuario(self.usuario_data)
-            memory.limpiar_historial_completo()
-            self.historial = []
-            self.resumen   = ""
-            self.mensajes_sin_resumir = 0
+            self._olvidar_conversaciones()
             return "🧠 Hecho. He olvidado todo lo que sabía de ti."
 
         elif objetivo == "historial":
-            memory.limpiar_historial_completo()
-            self.historial = []
-            self.resumen   = ""
-            self.mensajes_sin_resumir = 0
+            self._olvidar_conversaciones()
             return "🧠 Historial borrado. Empezamos desde cero."
 
         elif objetivo in ("nombre", "rol", "intereses", "notas"):
@@ -236,20 +240,14 @@ class Cain:
     # ─── Conversación ────────────────────────────────────────────────────────
 
     def _conversar(self, mensaje_usuario, canal="texto"):
-        if self.mensajes_sin_resumir >= INTERVALO_RESUMEN:
-            # Solo los mensajes nuevos: los anteriores ya están en el resumen.
-            nuevos = self.historial[-self.mensajes_sin_resumir:]
-            self.resumen = prompts.generar_resumen(self.llm, self.resumen, nuevos)
-            memory.guardar_resumen(self.resumen)
-            self.mensajes_sin_resumir = 0
-            print("[DEBUG] Resumen actualizado")
-
         intencion = self._detectar_intencion(mensaje_usuario)
         print(f"[DEBUG] Intención detectada: {intencion}")
 
         self._actualizar_usuario(mensaje_usuario)
 
-        prompt_sistema = prompts.construir_prompt(intencion, self.usuario_data, self.resumen, canal)
+        prompt_sistema = prompts.construir_prompt(
+            intencion, self.usuario_data, director.bloque_para_prompt(self.memoria_larga), canal
+        )
 
         self.historial.append({"role": "user", "content": mensaje_usuario})
         mensajes = [{"role": "system", "content": prompt_sistema}] + self.historial
@@ -258,12 +256,68 @@ class Cain:
 
         self.historial.append({"role": "assistant", "content": respuesta_texto})
         self.historial = memory.truncar_historial(self.historial)
-        # Tope en el tamaño del historial: lo que se truncó sin resumir ya no existe.
-        self.mensajes_sin_resumir = min(self.mensajes_sin_resumir + 2, len(self.historial))
         memory.guardar_memoria(self.historial)
+
+        with self._lock_memoria:
+            # Tope en el tamaño del historial: lo que se truncó sin pasar por el director ya no existe.
+            self.mensajes_sin_resumir = min(self.mensajes_sin_resumir + 2, len(self.historial))
+            pasada = None
+            if self.mensajes_sin_resumir >= INTERVALO_DIRECTOR and not self._director_activo:
+                pasada = self._preparar_director()
+        # El hilo arranca fuera del lock: _correr_director también lo toma.
+        if pasada:
+            self._hilo_director = threading.Thread(target=self._correr_director, args=pasada, daemon=True)
+            self._hilo_director.start()
 
         print(f"[DEBUG] Mensajes en memoria: {len(self.historial)}")
         return respuesta_texto
+
+    # ─── Director de memoria (ver core/director.py) ──────────────────────────
+
+    def _director_en_curso(self):
+        return self._director_activo
+
+    def _preparar_director(self):
+        """Copia lo que necesita la pasada. Se llama con _lock_memoria tomado."""
+        n = self.mensajes_sin_resumir
+        # Solo los mensajes nuevos: los anteriores ya pasaron por el director.
+        nuevos  = copy.deepcopy(self.historial[-n:])
+        memoria = copy.deepcopy(self.memoria_larga)
+        perfil  = copy.deepcopy(self.usuario_data)
+        self.mensajes_sin_resumir = 0
+        self._director_activo     = True
+        return (memoria, perfil, nuevos, self._generacion_memoria)
+
+    def _correr_director(self, memoria, perfil, nuevos, generacion):
+        try:
+            resultado = director.llamar_director(self.llm, memoria, perfil, nuevos)
+        except Exception as e:
+            # La memoria es "mejor esfuerzo": un fallo aquí nunca tumba la conversación.
+            print(f"[DEBUG] Director de memoria falló: {e}")
+            resultado = None
+
+        with self._lock_memoria:
+            self._director_activo = False
+            if generacion != self._generacion_memoria:
+                print("[DEBUG] Director descartado: la memoria se borró mientras corría")
+                return
+            if resultado is None:
+                # Esos mensajes vuelven a la cola para la próxima pasada.
+                self.mensajes_sin_resumir = min(self.mensajes_sin_resumir + len(nuevos),
+                                                len(self.historial))
+                return
+            director.aplicar_resultado(self.memoria_larga, resultado)
+            memory.guardar_memoria_larga(self.memoria_larga)
+        print("[DEBUG] Memoria a largo plazo actualizada por el director")
+
+    def _olvidar_conversaciones(self):
+        """Borra historial y memoria a largo plazo (no el perfil explícito)."""
+        with self._lock_memoria:
+            memory.limpiar_historial_completo()
+            self.historial            = []
+            self.memoria_larga        = memory.memoria_larga_vacia()
+            self.mensajes_sin_resumir = 0
+            self._generacion_memoria += 1
 
     # ─── Detección (delega en intent) ────────────────────────────────────────
 

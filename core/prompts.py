@@ -105,11 +105,11 @@ Tu respuesta se va a decir en voz alta, no se va a leer.
 """
 
 
-def construir_prompt(intencion, usuario_data, resumen, canal="texto"):
+def construir_prompt(intencion, usuario_data, memoria_larga="", canal="texto"):
     """
     Arma el prompt de sistema completo combinando:
     - Info del usuario (nombre, rol, intereses)
-    - Resumen de conversaciones pasadas
+    - Memoria a largo plazo (bloque del director, ver core/director.py)
     - PROMPT_BASE + sufijo según intención
     - SUFIJO_VOZ si la respuesta se va a sintetizar (canal="voz")
     """
@@ -127,13 +127,13 @@ def construir_prompt(intencion, usuario_data, resumen, canal="texto"):
         for nota in usuario_data["notas"]:
             info_usuario += f"  - {nota}\n"
 
-    contexto_resumen = ""
-    if resumen:
-        contexto_resumen = f"Resumen de conversaciones previas:\n{resumen}\n\n"
+    contexto_memoria = ""
+    if memoria_larga:
+        contexto_memoria = f"Memoria de conversaciones previas:\n{memoria_larga}\n\n"
 
     sufijo_canal = SUFIJO_VOZ if canal == "voz" else ""
 
-    return PROMPT_BASE + sufijo + CONTEXTO_EXTRA + contexto_resumen + info_usuario + sufijo_canal
+    return PROMPT_BASE + sufijo + CONTEXTO_EXTRA + contexto_memoria + info_usuario + sufijo_canal
 
 
 # ─── Helpers de LLM para archivos ────────────────────────────────────────────
@@ -253,30 +253,3 @@ Tu tarea:
         ).strip()
 
     return codigo_corregido
-
-
-# ─── Resumen de conversación ─────────────────────────────────────────────────
-
-def generar_resumen(llm, resumen_actual, mensajes_nuevos):
-    etiquetas = {"user": "Usuario", "assistant": "CAIN"}
-    texto_historial = "\n".join(
-        f"{etiquetas.get(m['role'], m['role'])}: {m['content']}" for m in mensajes_nuevos
-    )
-    sistema = f"""
-Eres un sistema de memoria a largo plazo.
-
-Actualiza el resumen del usuario con la conversación reciente.
-Conserva: información importante, proyectos, intereses, contexto relevante.
-Ignora: saludos, conversaciones triviales.
-
-Resumen actual:
-{resumen_actual}
-
-Nueva conversación:
-{texto_historial}
-
-Devuelve un resumen actualizado en máximo 3 líneas.
-"""
-    return llm.chat(
-        [{"role": "user", "content": sistema}], temperature=0.3
-    ).strip()
