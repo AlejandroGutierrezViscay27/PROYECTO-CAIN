@@ -6,6 +6,9 @@ from core import memory, tools, intent, prompts, executor
 from core.tool_schemas import TOOLS, PROMPT_ENRUTADOR
 import os
 
+# Cada cuántos mensajes nuevos (usuario + CAIN) se actualiza el resumen.
+INTERVALO_RESUMEN = 10
+
 
 class Cain:
     """
@@ -22,6 +25,10 @@ class Cain:
         self.usuario_data   = memory.cargar_usuario()
         self.resumen        = memory.cargar_resumen()
         self.ultimo_archivo = None
+        # Mensajes añadidos al historial desde el último resumen. No se puede
+        # deducir de len(historial): el historial se trunca a MAX_HISTORIAL y
+        # se queda fijo en ese tamaño.
+        self.mensajes_sin_resumir = 0
 
         self._herramientas = {
             "crear_archivo":     self._crear_archivo,
@@ -36,8 +43,13 @@ class Cain:
 
     # ─── Punto de entrada ────────────────────────────────────────────────────
 
-    def chat(self, mensaje_usuario):
-        """Procesa un mensaje del usuario y retorna la respuesta de CAIN."""
+    def chat(self, mensaje_usuario, canal="texto"):
+        """
+        Procesa un mensaje del usuario y retorna la respuesta de CAIN.
+
+        canal: "texto" o "voz". Con "voz" la respuesta se pide corta y sin
+        formato, porque se va a sintetizar.
+        """
 
         resultado = self.llm.chat_with_tools(
             [
@@ -57,7 +69,7 @@ class Cain:
             if handler:
                 return handler(argumentos)
 
-        return self._conversar(mensaje_usuario)
+        return self._conversar(mensaje_usuario, canal)
 
     # ─── Herramientas de archivo ─────────────────────────────────────────────
 
@@ -139,12 +151,14 @@ class Cain:
             memory.limpiar_historial_completo()
             self.historial = []
             self.resumen   = ""
+            self.mensajes_sin_resumir = 0
             return "🧠 Hecho. He olvidado todo lo que sabía de ti."
 
         elif objetivo == "historial":
             memory.limpiar_historial_completo()
             self.historial = []
             self.resumen   = ""
+            self.mensajes_sin_resumir = 0
             return "🧠 Historial borrado. Empezamos desde cero."
 
         elif objetivo in ("nombre", "rol", "intereses", "notas"):
@@ -221,10 +235,13 @@ class Cain:
 
     # ─── Conversación ────────────────────────────────────────────────────────
 
-    def _conversar(self, mensaje_usuario):
-        if len(self.historial) > 0 and len(self.historial) % 10 == 0:
-            self.resumen = prompts.generar_resumen(self.llm, self.resumen, self.historial)
+    def _conversar(self, mensaje_usuario, canal="texto"):
+        if self.mensajes_sin_resumir >= INTERVALO_RESUMEN:
+            # Solo los mensajes nuevos: los anteriores ya están en el resumen.
+            nuevos = self.historial[-self.mensajes_sin_resumir:]
+            self.resumen = prompts.generar_resumen(self.llm, self.resumen, nuevos)
             memory.guardar_resumen(self.resumen)
+            self.mensajes_sin_resumir = 0
             print("[DEBUG] Resumen actualizado")
 
         intencion = self._detectar_intencion(mensaje_usuario)
@@ -232,7 +249,7 @@ class Cain:
 
         self._actualizar_usuario(mensaje_usuario)
 
-        prompt_sistema = prompts.construir_prompt(intencion, self.usuario_data, self.resumen)
+        prompt_sistema = prompts.construir_prompt(intencion, self.usuario_data, self.resumen, canal)
 
         self.historial.append({"role": "user", "content": mensaje_usuario})
         mensajes = [{"role": "system", "content": prompt_sistema}] + self.historial
@@ -241,6 +258,8 @@ class Cain:
 
         self.historial.append({"role": "assistant", "content": respuesta_texto})
         self.historial = memory.truncar_historial(self.historial)
+        # Tope en el tamaño del historial: lo que se truncó sin resumir ya no existe.
+        self.mensajes_sin_resumir = min(self.mensajes_sin_resumir + 2, len(self.historial))
         memory.guardar_memoria(self.historial)
 
         print(f"[DEBUG] Mensajes en memoria: {len(self.historial)}")

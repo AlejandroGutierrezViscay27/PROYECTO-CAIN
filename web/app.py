@@ -21,6 +21,7 @@ from core.agent import Cain
 from core.executor import encontrar_puerto_libre
 from voice.stt import FasterWhisperSTT
 from voice.tts import crear_tts
+from voice.limpieza import limpiar_para_voz
 
 app       = FastAPI()
 templates = Jinja2Templates(directory="web/templates")
@@ -130,8 +131,9 @@ async def websocket_endpoint(websocket: WebSocket):
     async def procesar_mensaje(mensaje, hablar=False):
         await websocket.send_text(json.dumps({"tipo": "estado", "estado": "pensando"}))
 
+        canal = "voz" if hablar else "texto"
         try:
-            respuesta = await loop.run_in_executor(pool, cain_agent.chat, mensaje)
+            respuesta = await loop.run_in_executor(pool, cain_agent.chat, mensaje, canal)
         except Exception as e:
             # Al correr en una tarea aparte, una excepción aquí no la ve
             # el try/except del bucle principal — hay que avisar al
@@ -143,9 +145,12 @@ async def websocket_endpoint(websocket: WebSocket):
             "tipo": "respuesta", "contenido": respuesta, "estado": "listo"
         }))
 
-        if hablar:
+        # El chat muestra la respuesta tal cual; a la voz le llega sin
+        # emojis, markdown ni código (Piper los leería como basura).
+        texto_voz = limpiar_para_voz(respuesta) if hablar else ""
+        if texto_voz:
             try:
-                audio = await loop.run_in_executor(pool, tts.sintetizar, respuesta)
+                audio = await loop.run_in_executor(pool, tts.sintetizar, texto_voz)
                 await websocket.send_bytes(audio)
             except Exception as e:
                 print(f"[DEBUG] Error de síntesis de voz: {e}")

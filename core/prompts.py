@@ -95,13 +95,23 @@ SUFIJOS_POR_INTENCION = {
     "conversacion":  "\nResponde de forma natural y equilibrada.",
 }
 
+SUFIJO_VOZ = """
 
-def construir_prompt(intencion, usuario_data, resumen):
+CANAL: VOZ
+Tu respuesta se va a decir en voz alta, no se va a leer.
+- Sé breve: 1 a 3 frases, salvo que el usuario pida una historia o una explicación larga.
+- Escribe como hablas: nada de listas, títulos, markdown, emojis ni bloques de código.
+- Si la respuesta necesita código o datos largos, dilo en una frase y ofrece dejarlo por escrito.
+"""
+
+
+def construir_prompt(intencion, usuario_data, resumen, canal="texto"):
     """
     Arma el prompt de sistema completo combinando:
     - Info del usuario (nombre, rol, intereses)
     - Resumen de conversaciones pasadas
     - PROMPT_BASE + sufijo según intención
+    - SUFIJO_VOZ si la respuesta se va a sintetizar (canal="voz")
     """
     sufijo = SUFIJOS_POR_INTENCION.get(intencion, SUFIJOS_POR_INTENCION["conversacion"])
 
@@ -121,7 +131,9 @@ def construir_prompt(intencion, usuario_data, resumen):
     if resumen:
         contexto_resumen = f"Resumen de conversaciones previas:\n{resumen}\n\n"
 
-    return PROMPT_BASE + sufijo + CONTEXTO_EXTRA + contexto_resumen + info_usuario
+    sufijo_canal = SUFIJO_VOZ if canal == "voz" else ""
+
+    return PROMPT_BASE + sufijo + CONTEXTO_EXTRA + contexto_resumen + info_usuario + sufijo_canal
 
 
 # ─── Helpers de LLM para archivos ────────────────────────────────────────────
@@ -245,8 +257,11 @@ Tu tarea:
 
 # ─── Resumen de conversación ─────────────────────────────────────────────────
 
-def generar_resumen(llm, resumen_actual, historial):
-    texto_historial = "\n".join([m["content"] for m in historial])
+def generar_resumen(llm, resumen_actual, mensajes_nuevos):
+    etiquetas = {"user": "Usuario", "assistant": "CAIN"}
+    texto_historial = "\n".join(
+        f"{etiquetas.get(m['role'], m['role'])}: {m['content']}" for m in mensajes_nuevos
+    )
     sistema = f"""
 Eres un sistema de memoria a largo plazo.
 
