@@ -48,6 +48,8 @@ Variables de entorno en `.env` (ver `.env` para el listado completo):
   propias usa las generales; si cambia de proveedor, no hereda `LLM_MODEL`.
   Sin nada configurado, todo va con `openai:gpt-4o-mini`.
 - `OLLAMA_URL` (default `http://localhost:11434/v1`).
+- `CAIN_SO` (`off` por defecto | `simulado` | `windows`) — control del
+  sistema operativo (Fase 10).
 - `TTS_PROVIDER` (`piper` | `api`), `TTS_API_URL`, `TTS_VOICE_ID`,
   `TTS_API_KEY`, `TTS_API_TIMEOUT`.
 - Red local (Fase 9): `CAIN_TOKEN` (sin él solo entra localhost),
@@ -66,6 +68,10 @@ Variables de entorno en `.env` (ver `.env` para el listado completo):
   blanca/negra, niveles — solo se cambian a mano); `rutas.resolver()` convierte
   la ruta del LLM en una segura o lanza `Denegado`; `revision_codigo.py`
   (AST del Python generado); `auditoria.py` → `data/auditoria.jsonl`.
+- `so/` — control del sistema operativo (Fase 10): `ControlSO` en `base.py`
+  (10.1: solo lectura), `windows.py` (ctypes), `simulado.py`; fábrica
+  `crear_control_so()` según `CAIN_SO`. Las herramientas de sistema
+  (`TOOLS_SO`) solo se ofrecen al LLM si hay uno activo.
 - `llm/` — interfaz `LLMProvider`, proveedores, fábrica por rol y registro
   de gasto.
 - `voice/` — interfaces `SpeechToText`/`TextToSpeech`, proveedores

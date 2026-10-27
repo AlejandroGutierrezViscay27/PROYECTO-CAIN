@@ -21,6 +21,9 @@ Analiza el mensaje del usuario y decide:
   aunque el usuario no dé todos los detalles (por ejemplo "borra el
   archivo" o "léelo" sin decir el nombre). Los parámetros opcionales
   que falten pueden omitirse.
+- Si pregunta qué tiene abierto en el PC, qué programa está usando, o por
+  el estado del equipo (hora, batería, memoria, disco, cuánto lleva
+  encendido) y esas herramientas están disponibles → invócalas.
 - Si es conversación normal, una pregunta general, o pide un EJEMPLO
   o EXPLICACIÓN de cómo hacer algo (sin pedir que tú lo hagas ahora)
   → NO invoques ninguna herramienta.
@@ -178,6 +181,27 @@ TOOLS = [
                 "properties": {},
                 "required": [],
             },
+        },
+    },
+]
+
+# Fase 10.1 — observar el sistema (N0). Solo se le ofrecen al LLM si hay un
+# ControlSO activo (CAIN_SO en el .env); si no, ni sabe que existen.
+TOOLS_SO = [
+    {
+        "type": "function",
+        "function": {
+            "name": "sistema_ventanas",
+            "description": "Lista las ventanas de aplicación abiertas en el PC del usuario y cuál está activa. Úsala cuando pregunte qué tiene abierto o qué programa está usando.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "sistema_info",
+            "description": "Estado del PC del usuario: fecha y hora, batería, memoria RAM, espacio en disco y tiempo encendido.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },
 ]

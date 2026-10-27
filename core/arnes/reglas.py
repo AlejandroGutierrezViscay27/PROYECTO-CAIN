@@ -23,6 +23,8 @@ NIVEL_CONFIRMACION = N2
 NIVEL_HERRAMIENTA = {
     "leer_archivo":      N0,
     "memoria_consultar": N0,
+    "sistema_ventanas":  N0,   # Fase 10.1: el resultado va al usuario, nunca al LLM
+    "sistema_info":      N0,
     "crear_archivo":     N1,   # nunca sobrescribe
     "editar_archivo":    N1,   # guarda la versión anterior en .respaldos/
     "memoria_recordar":  N1,

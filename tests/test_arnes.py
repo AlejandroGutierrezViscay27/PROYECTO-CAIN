@@ -15,7 +15,7 @@ from unittest import mock
 from core import arnes, executor, tools
 from core.arnes import auditoria, reglas, revision_codigo, rutas
 from core.arnes.rutas import Denegado
-from core.tool_schemas import TOOLS
+from core.tool_schemas import TOOLS, TOOLS_SO
 from tests.test_director import BaseAgente
 
 PERFIL      = os.path.expanduser("~")
@@ -133,7 +133,7 @@ class TestVerificar(unittest.TestCase):
 class TestEvaluar(unittest.TestCase):
 
     def test_toda_herramienta_declarada_tiene_nivel(self):
-        nombres = {t["function"]["name"] for t in TOOLS}
+        nombres = {t["function"]["name"] for t in TOOLS + TOOLS_SO}
         self.assertLessEqual(nombres, set(reglas.NIVEL_HERRAMIENTA))
 
     def test_herramienta_sin_nivel_se_rechaza(self):

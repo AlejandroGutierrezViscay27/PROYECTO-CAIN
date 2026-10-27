@@ -3,7 +3,9 @@ from llm.registro import RegistroUso
 
 from core import memory, tools, intent, prompts, executor, director, emocion, arnes
 from core.arnes import auditoria, reglas, revision_codigo, rutas
-from core.tool_schemas import TOOLS, PROMPT_ENRUTADOR
+from core.tool_schemas import TOOLS, TOOLS_SO, PROMPT_ENRUTADOR
+from so import crear_control_so
+import time
 import copy
 import os
 import threading
@@ -48,6 +50,10 @@ class Cain:
 
         # Todas pasan por _usar_herramienta (el arnés): ninguna se llama directo.
         # Las de nivel N2+ no actúan: devuelven una arnes.Accion a confirmar.
+        # Control del sistema (Fase 10): None con CAIN_SO=off (por defecto).
+        self.so    = crear_control_so()
+        self.tools = TOOLS + (TOOLS_SO if self.so else [])
+
         self._herramientas = {
             "crear_archivo":     self._crear_archivo,
             "leer_archivo":      self._leer_archivo,
@@ -58,6 +64,11 @@ class Cain:
             "memoria_olvidar":   self._preparar_olvido,
             "memoria_consultar": self._memoria_consultar,
         }
+        if self.so:
+            self._herramientas.update({
+                "sistema_ventanas": self._sistema_ventanas,
+                "sistema_info":     self._sistema_info,
+            })
 
     # ─── Punto de entrada ────────────────────────────────────────────────────
 
@@ -76,7 +87,7 @@ class Cain:
                 {"role": "system", "content": PROMPT_ENRUTADOR},
                 {"role": "user",   "content": mensaje_usuario},
             ],
-            tools=TOOLS,
+            tools=self.tools,
             temperature=0.2,
         )
 
@@ -237,6 +248,49 @@ class Cain:
             return f"Error en edición: {error}"
         return (f"✏️ Archivo '{self._mostrar(ruta)}' actualizado.\n"
                 f"(La versión anterior quedó en '{self._mostrar(copia)}'.)")
+
+    # ─── Observar el sistema (Fase 10.1, N0) ─────────────────────────────────
+    # Lo que devuelven va directo al usuario: ni al LLM ni al historial. Un
+    # título de ventana puede traer texto ajeno (asunto de un correo, título
+    # de una web) y así nunca llega a leerse como instrucción.
+
+    MAX_VENTANAS       = 30
+    LARGO_MAX_TITULO   = 90
+
+    def _sistema_ventanas(self, argumentos):
+        ventanas = self.so.ventanas()
+        if not ventanas:
+            return "🎭 No veo ninguna ventana abierta."
+
+        def linea(v):
+            titulo = v.titulo if len(v.titulo) <= self.LARGO_MAX_TITULO else v.titulo[:self.LARGO_MAX_TITULO] + "…"
+            proceso = f" ({v.proceso})" if v.proceso else ""
+            return f"{'▶' if v.activa else '•'} {titulo}{proceso}"
+
+        lineas = [linea(v) for v in ventanas[:self.MAX_VENTANAS]]
+        if len(ventanas) > self.MAX_VENTANAS:
+            lineas.append(f"… y {len(ventanas) - self.MAX_VENTANAS} más")
+        activa = next((v for v in ventanas if v.activa), None)
+        cabecera = f"🪟 Tienes {len(ventanas)} ventana{'s' if len(ventanas) != 1 else ''} abierta{'s' if len(ventanas) != 1 else ''}"
+        cabecera += f"; estás en {activa.proceso or activa.titulo[:40]}." if activa else "."
+        return cabecera + "\n\n" + "\n".join(lineas)
+
+    def _sistema_info(self, argumentos):
+        info = self.so.info_sistema()
+        lineas = [f"🕰️ {_fecha_hora()}"]
+        if info.get("bateria_pct") is not None:
+            estado = "cargando" if info.get("cargando") else "sin cargar"
+            lineas.append(f"🔋 Batería: {info['bateria_pct']} % ({estado})")
+        if info.get("ram_total"):
+            usada = info["ram_total"] - info["ram_libre"]
+            lineas.append(f"🧠 RAM: {_gb(usada)} de {_gb(info['ram_total'])} en uso")
+        if info.get("disco_total"):
+            lineas.append(f"💾 Disco: {_gb(info['disco_libre'])} libres de {_gb(info['disco_total'])}")
+        if info.get("encendido_seg") is not None:
+            lineas.append(f"⏱️ Encendido hace {_duracion(info['encendido_seg'])}")
+        if info.get("sistema"):
+            lineas.append(f"💻 {info['sistema']}")
+        return "\n".join(lineas)
 
     # ─── Memoria explícita ───────────────────────────────────────────────────
 
@@ -479,3 +533,33 @@ class Cain:
                     self.usuario_data["intereses"].append(i)
             memory.guardar_usuario(self.usuario_data)
             print(f"[DEBUG] Intereses guardados: {self.usuario_data['intereses']}")
+
+# ─── Formato para el usuario ─────────────────────────────────────────────────
+
+_DIAS  = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+_MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
+          "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+
+
+def _fecha_hora(ahora=None):
+    """'lunes 27 de octubre de 2026, 14:05' (sin depender del locale del sistema)."""
+    t = time.localtime(ahora)
+    return f"{_DIAS[t.tm_wday]} {t.tm_mday} de {_MESES[t.tm_mon - 1]} de {t.tm_year}, {t.tm_hour:02d}:{t.tm_min:02d}"
+
+
+def _gb(n_bytes):
+    return f"{n_bytes / 1024 ** 3:.1f} GB"
+
+
+def _duracion(segundos):
+    dias, resto = divmod(int(segundos), 86400)
+    horas, resto = divmod(resto, 3600)
+    minutos = resto // 60
+    partes = []
+    if dias:
+        partes.append(f"{dias} día{'s' if dias != 1 else ''}")
+    if horas:
+        partes.append(f"{horas} h")
+    if minutos or not partes:
+        partes.append(f"{minutos} min")
+    return " ".join(partes)
