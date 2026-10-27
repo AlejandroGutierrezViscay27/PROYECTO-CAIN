@@ -13,6 +13,7 @@ function conectar() {
   state.ws.onopen = () => {
     state.connected = true;
     setStatus("En línea", false);
+    cargarHistorial();
     cargarMemoria();
     cargarProyectos();
   };
@@ -37,7 +38,24 @@ function conectar() {
   };
 }
 
+// ─── Historial — la conversación sigue al cambiar de dispositivo ─────────
+async function cargarHistorial() {
+  // Solo la primera vez: al reconectar, el chat ya tiene lo que se vio.
+  if (state.historialCargado) return;
+  try {
+    const res  = await fetch("/api/historial");
+    const data = await res.json();
+    data.mensajes.forEach(m => agregarMensaje(m.rol, m.contenido));
+    state.historialCargado = true;
+  } catch (_) {}
+}
+
 function manejarMensaje(data) {
+  if (data.tipo === "mensaje_usuario") {
+    // Lo escribió (o dijo) el usuario desde otro dispositivo.
+    agregarMensaje("user", data.contenido);
+  }
+
   if (data.tipo === "estado" && data.estado === "pensando") {
     mostrarTyping();
     setStatus("Pensando...", true);

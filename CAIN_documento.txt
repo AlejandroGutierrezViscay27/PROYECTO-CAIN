@@ -147,6 +147,19 @@ CAIN ya es un agente funcional con las siguientes capacidades:
   ✦ Registro de gasto: llamadas, tokens y costo estimado por día,
     rol y modelo (data/uso_llm.json, GET /api/uso)
 
+  CAIN COMO SERVICIO EN LA RED LOCAL
+  ✦ Se usa desde el móvil, la tablet o cualquier PC de la casa
+  ✦ Acceso por token (CAIN_TOKEN): se abre una vez /?token=... y queda
+    en una cookie. Sin token configurado solo entra la propia máquina
+  ✦ Multi-dispositivo real: todos ven la misma conversación en vivo;
+    al entrar desde otro dispositivo aparece el historial reciente
+  ✦ Un turno a la vez; la confirmación de un proyecto y la voz van
+    solo al dispositivo que los pidió
+  ✦ Los proyectos web los sirve el propio CAIN (/proyectos/...): se
+    abren y se ejecutan directamente en el móvil
+  ✦ HTTPS opcional (certificado de mkcert) para hablarle desde el móvil
+  ✦ Interfaz adaptada al móvil: memoria y proyectos en un cajón (☰)
+
   LA CARA
   ✦ Rostro 3D reactivo (Three.js) que refleja el estado de CAIN en vivo
   ✦ Deformación orgánica por ruido simplex, con normales recalculadas
@@ -188,6 +201,8 @@ PROYECTO-CAIN/
 │
 ├── web/
 │   ├── app.py             → servidor FastAPI + WebSockets
+│   ├── acceso.py          → acceso por token desde la red local
+│   ├── conexiones.py      → varios dispositivos, una conversación
 │   ├── static/
 │   │   ├── style.css      → interfaz teatral oscura
 │   │   └── js/            → chat, websocket, estado, modal, voz, memoria,
@@ -223,6 +238,7 @@ DECISIÓN DE DISEÑO CLAVE — Capa LLM Abstracta:
 
   BACKEND
   ✦ Python 3.x          → lenguaje principal
+  ✦ mkcert              → certificado HTTPS local (voz desde el móvil)
   ✦ FastAPI             → servidor web y API REST
   ✦ Uvicorn             → servidor ASGI con soporte WebSockets
   ✦ WebSockets          → comunicación en tiempo real
@@ -302,9 +318,17 @@ DECISIÓN DE DISEÑO CLAVE — Capa LLM Abstracta:
    llega a La Cara y a la prosodia de Piper; y un LLM por rol con
    registro de gasto.
 
-⏳ FASE 9 — CAIN COMO SERVICIO
+🔧 FASE 9 — CAIN COMO SERVICIO (en construcción)
    FastAPI completo, accesible desde cualquier dispositivo
    en la red local. Multi-dispositivo real.
+   Hecho y probado en un móvil real: acceso por token (CAIN_TOKEN;
+   localhost entra sin él), varios dispositivos con la misma
+   conversación en vivo, turnos de uno en uno, confirmación y voz
+   solo para quien pidió, historial al entrar, proyectos servidos
+   por el propio CAIN (las páginas 3D corren en el móvil), HTTPS
+   con mkcert para la voz y panel lateral como cajón en el móvil.
+   Pendiente: que los proyectos que CAIN crea desde el chat se
+   abran en el dispositivo que los pidió (hoy abren en el PC).
 
 ⏳ FASE 10 — CONTROL DEL SISTEMA OPERATIVO
    Mouse, teclado, aplicaciones, navegador. CAIN actúa

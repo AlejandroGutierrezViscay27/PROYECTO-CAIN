@@ -28,6 +28,12 @@ const mic = {
 
 async function abrirMicrofono() {
   if (mic.ctx) return;
+  if (!navigator.mediaDevices) {
+    // Desde otro dispositivo por http:// el navegador esconde el micrófono:
+    // solo lo da en localhost o con HTTPS (CAIN_SSL_CERT en el .env).
+    agregarMensaje("cain", "⚠️ El micrófono necesita HTTPS cuando entras desde otro dispositivo. Configura CAIN_SSL_CERT y CAIN_SSL_KEY en el .env.");
+    throw new Error("Contexto inseguro: sin acceso al micrófono");
+  }
   mic.stream = await navigator.mediaDevices.getUserMedia({
     audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
   });

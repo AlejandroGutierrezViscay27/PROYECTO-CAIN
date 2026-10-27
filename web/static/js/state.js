@@ -7,6 +7,7 @@ const state = {
   // antes de que llegue, ese audio se descarta (ver voice.js).
   audioPendiente: false,
   descartarAudio: false,
+  historialCargado: false,
 };
 
 // ─── Elementos DOM ────────────────────────────────────────────────────────

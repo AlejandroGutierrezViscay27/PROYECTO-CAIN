@@ -18,6 +18,12 @@ micBtn.addEventListener("touchend", (e) => { e.preventDefault(); detenerGrabacio
 // ─── Manos libres — clic para activar/desactivar ─────────────────────────
 vadBtn.addEventListener("click", alternarManosLibres);
 
+// ─── Panel lateral en el móvil — ☰ abre; fondo, ✕ o Escape cierran ───────
+document.getElementById("menuBtn").addEventListener("click", abrirPanel);
+document.getElementById("sidebarClose").addEventListener("click", cerrarPanel);
+document.getElementById("sidebarBackdrop").addEventListener("click", cerrarPanel);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") cerrarPanel(); });
+
 // ─── Init ─────────────────────────────────────────────────────────────────
 conectar();
 messageInput.focus();

@@ -50,6 +50,9 @@ Variables de entorno en `.env` (ver `.env` para el listado completo):
 - `OLLAMA_URL` (default `http://localhost:11434/v1`).
 - `TTS_PROVIDER` (`piper` | `api`), `TTS_API_URL`, `TTS_VOICE_ID`,
   `TTS_API_KEY`, `TTS_API_TIMEOUT`.
+- Red local (Fase 9): `CAIN_TOKEN` (sin él solo entra localhost),
+  `CAIN_HOST`, `CAIN_PORT`, `CAIN_SSL_CERT`/`CAIN_SSL_KEY` (HTTPS: el
+  micrófono desde otro dispositivo lo exige).
 
 ## Estructura
 
@@ -63,7 +66,12 @@ Variables de entorno en `.env` (ver `.env` para el listado completo):
 - `voice/` — interfaces `SpeechToText`/`TextToSpeech`, proveedores
   concretos y limpieza de texto para voz.
 - `web/` — app FastAPI (`app.py`), templates y estáticos (`static/js`,
-  `static/style.css`).
+  `static/style.css`). `acceso.py`: token para la red local (middleware HTTP
+  y chequeo en `/ws`). `conexiones.py`: `GestorConexiones` — varios
+  dispositivos ven la misma conversación; un turno a la vez (`turno`); la
+  confirmación y el audio van solo al dispositivo que pidió. Los proyectos
+  web los sirve el propio FastAPI en `/proyectos/<nombre>/` (rutas validadas
+  con `executor.archivo_de_proyecto`).
 - `data/` — memoria persistida y voces de Piper (`data/voices/`). No está
   en git. Archivos: `memoria.json` (historial), `memoria_usuario.json`
   (perfil), `memoria_larga.json` (director), `uso_llm.json` (gasto);
@@ -99,6 +107,9 @@ Variables de entorno en `.env` (ver `.env` para el listado completo):
   `llm/fabrica.py:crear_llms()`).
 - Escritura de JSON siempre con `memory._guardar_json` (atómica: temporal +
   `os.replace`); lectura con `memory._cargar_json` (tolera JSON corrupto).
+- Todo JS/CSS nuevo en `index.html` se enlaza con `?v={{ v }}` (versión
+  que calcula `web/app.py` al arrancar): sin eso el móvil sigue usando la
+  copia vieja aunque se borre la caché.
 - Los `print` de depuración solo con ASCII (`->`, no `→`): la consola de
   Windows (cp1252) lanza `UnicodeEncodeError` y tumba el turno.
 - Commits en español, directo sobre `main`.

@@ -22,11 +22,12 @@ async function cargarProyectos() {
 
 // ─── Interacción con proyectos ────────────────────────────────────────────
 async function abrirProyecto(nombre, tipo) {
+  cerrarPanel();  // en el móvil el cajón taparía el modal o el chat
   // Mostrar estado de carga en el proyecto
   mostrarModalCargando(nombre);
 
   try {
-    const res  = await fetch(`/api/proyectos/${nombre}/abrir`, { method: "POST" });
+    const res  = await fetch(`/api/proyectos/${encodeURIComponent(nombre)}/abrir`, { method: "POST" });
     const data = await res.json();
 
     if (data.error) {
@@ -37,9 +38,10 @@ async function abrirProyecto(nombre, tipo) {
 
     if (data.tipo === "web") {
       cerrarModal();
-      // Abrir en pestaña nueva
+      // Abrir en pestaña nueva — la URL es relativa: la sirve el propio
+      // CAIN, así funciona igual desde cualquier dispositivo de la red.
       window.open(data.url, "_blank");
-      agregarMensaje("cain", `🌐 Proyecto <strong>${nombre}</strong> abierto en: ${data.url}`);
+      agregarMensaje("cain", `🌐 Proyecto ${nombre} abierto en: ${new URL(data.url, location.href).href}`);
     }
 
     if (data.tipo === "python") {

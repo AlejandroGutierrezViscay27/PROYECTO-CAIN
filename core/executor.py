@@ -38,6 +38,39 @@ def detectar_tipo(nombre_archivo):
     return "otro"
 
 
+def carpeta_de_proyecto(nombre):
+    """
+    Ruta absoluta de un proyecto, o None si no existe o el nombre intenta
+    salirse de la carpeta de proyectos ("..", rutas absolutas...).
+    """
+    base = os.path.realpath(CARPETA_PROYECTOS)
+    ruta = os.path.realpath(os.path.join(base, nombre))
+    if os.path.dirname(ruta) != base or not os.path.isdir(ruta):
+        return None
+    return ruta
+
+
+def archivo_de_proyecto(nombre, ruta_relativa):
+    """Ruta absoluta de un archivo dentro de un proyecto, o None (igual que arriba)."""
+    carpeta = carpeta_de_proyecto(nombre)
+    if not carpeta:
+        return None
+    ruta = os.path.realpath(os.path.join(carpeta, ruta_relativa or "index.html"))
+    if os.path.isdir(ruta):
+        ruta = os.path.join(ruta, "index.html")
+    if os.path.commonpath([carpeta, ruta]) != carpeta or not os.path.isfile(ruta):
+        return None
+    return ruta
+
+
+def html_principal(archivos):
+    """El HTML con el que se abre un proyecto web: index.html si existe."""
+    htmls = sorted(a for a in archivos if os.path.splitext(a)[1] in EXTENSIONES_WEB)
+    if "index.html" in htmls:
+        return "index.html"
+    return htmls[0] if htmls else None
+
+
 def guardar_archivo_proyecto(ruta_proyecto, nombre_archivo, contenido):
     """Guarda un archivo dentro de la carpeta del proyecto."""
     ruta_completa = os.path.join(ruta_proyecto, nombre_archivo)

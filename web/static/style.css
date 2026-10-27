@@ -52,6 +52,8 @@ html, body {
   position: relative; z-index: 1;
   display: flex;
   height: 100vh;
+  /* En el móvil 100vh incluye la barra del navegador y tapa el input. */
+  height: 100dvh;
 }
 
 /* ─── Sidebar ────────────────────────────────────────────────────────────── */
@@ -514,9 +516,63 @@ html, body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 2px; }
 
-/* ─── Responsive mínimo ──────────────────────────────────────────────────── */
+/* ─── Responsive ─────────────────────────────────────────────────────────── */
+.menu-btn, .sidebar-close, .sidebar-backdrop { display: none; }
+
 @media (max-width: 768px) {
-  .sidebar { display: none; }
+  /* El panel lateral pasa a ser un cajón que se abre con el botón ☰. */
+  .sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0; z-index: 50;
+    width: min(85vw, 300px);
+    min-width: 0;
+    padding-top: 3rem;
+    transform: translateX(-100%);
+    visibility: hidden;   /* cerrado no debe recibir foco ni toques */
+    transition: transform 0.25s ease, visibility 0s 0.25s;
+  }
+  .sidebar.abierta {
+    transform: none;
+    visibility: visible;
+    transition: transform 0.25s ease;
+    box-shadow: 8px 0 30px rgba(0, 0, 0, 0.6);
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed; inset: 0; z-index: 40;
+    background: rgba(0, 0, 0, 0.6);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+  }
+  .sidebar-backdrop.visible { opacity: 1; pointer-events: auto; }
+
+  .sidebar-close {
+    display: block;
+    position: absolute; top: 0.8rem; right: 0.8rem;
+    width: 36px; height: 36px;
+    background: none;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius);
+    color: var(--text-dim);
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  .menu-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 40px; height: 40px;
+    background: var(--bg-3);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius);
+    color: var(--text-dim);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .menu-btn:hover { border-color: var(--accent-dim); color: var(--text); }
+
+  .header-left { gap: 0.7rem; }
+  .input-hint { display: none; }   /* atajos de teclado: no aplican en táctil */
   .header  { padding: 0 1rem; }
   .face-stage { height: 140px; }
   .face-orb { width: 120px; height: 120px; }

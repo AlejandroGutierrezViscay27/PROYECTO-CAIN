@@ -1,3 +1,18 @@
+// ─── Panel lateral — cajón en el móvil ────────────────────────────────────
+// En pantallas anchas el panel siempre está visible y esto no hace nada
+// visible: las clases solo tienen efecto dentro del @media del móvil.
+function abrirPanel() {
+  document.getElementById("sidebar").classList.add("abierta");
+  document.getElementById("sidebarBackdrop").classList.add("visible");
+  document.getElementById("menuBtn").setAttribute("aria-expanded", "true");
+}
+
+function cerrarPanel() {
+  document.getElementById("sidebar").classList.remove("abierta");
+  document.getElementById("sidebarBackdrop").classList.remove("visible");
+  document.getElementById("menuBtn").setAttribute("aria-expanded", "false");
+}
+
 // ─── Panel lateral — Memoria ──────────────────────────────────────────────
 async function cargarMemoria() {
   try {
