@@ -50,6 +50,8 @@ Variables de entorno en `.env` (ver `.env` para el listado completo):
 - `OLLAMA_URL` (default `http://localhost:11434/v1`).
 - `CAIN_SO` (`off` por defecto | `simulado` | `windows`) — control del
   sistema operativo (Fase 10).
+- `SPOTIFY_CLIENT_ID` (Fase 10.4; sin él no hay herramientas de Spotify),
+  `SPOTIFY_REDIRECT_URI` (default `http(s)://127.0.0.1:<CAIN_PORT>/spotify/callback`).
 - `TTS_PROVIDER` (`piper` | `api`), `TTS_API_URL`, `TTS_VOICE_ID`,
   `TTS_API_KEY`, `TTS_API_TIMEOUT`.
 - Red local (Fase 9): `CAIN_TOKEN` (sin él solo entra localhost),
@@ -76,6 +78,11 @@ Variables de entorno en `.env` (ver `.env` para el listado completo):
   Audio), `simulado.py`; fábrica
   `crear_control_so()` según `CAIN_SO`. Las herramientas de sistema
   (`TOOLS_SO`) solo se ofrecen al LLM si hay uno activo.
+- `so/conectores/` — servicios por su API (Fase 10.4: `spotify.py`, OAuth
+  PKCE, token en `data/spotify_token.json`). Un `ErrorConector` se le
+  explica al usuario tal cual. `/spotify/conectar` y `/spotify/callback`
+  solo desde el propio PC. El LLM nunca da un URI: `core/arnes/spotify.py`
+  valida los que devuelve la API.
 - `llm/` — interfaz `LLMProvider`, proveedores, fábrica por rol y registro
   de gasto.
 - `voice/` — interfaces `SpeechToText`/`TextToSpeech`, proveedores
@@ -91,7 +98,7 @@ Variables de entorno en `.env` (ver `.env` para el listado completo):
   llega por `cain._abrir_fn` y va en la respuesta (`proyecto`, `abrir`).
 - `data/` — memoria persistida y voces de Piper (`data/voices/`). No está
   en git. Archivos: `memoria.json` (historial), `memoria_usuario.json`
-  (perfil), `memoria_larga.json` (director), `uso_llm.json` (gasto);
+  (perfil), `memoria_larga.json` (director), `uso_llm.json` (gasto), `spotify_token.json`;
   `memoria_resumen.txt` es formato viejo, solo se lee para migrar.
 - `proyectos/` — proyectos generados y ejecutados por CAIN. Se sirven en
   `/p/<firma>/...` con CSP `sandbox` (su JS no puede usar la sesión de CAIN).

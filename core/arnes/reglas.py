@@ -29,6 +29,12 @@ NIVEL_HERRAMIENTA = {
     "sistema_abrir_url": N1,   # solo http(s), en el navegador de CAIN
     "sistema_multimedia": N1,  # play/pausa, siguiente, anterior
     "sistema_volumen":   N1,
+    "spotify_que_suena": N0,   # Fase 10.4: solo la API de Spotify, nunca su ventana
+    "spotify_mis_listas": N0,
+    "spotify_buscar":    N0,
+    "spotify_reproducir": N1,  # solo lo que exista en Spotify (URI de la API, no del LLM)
+    "spotify_control":   N1,   # pausar, reanudar, siguiente, anterior, aleatorio
+    "spotify_sugerir":   N1,   # cada propuesta del LLM se busca antes de sonar
     "crear_archivo":     N1,   # nunca sobrescribe
     "editar_archivo":    N1,   # guarda la versión anterior en .respaldos/
     "memoria_recordar":  N1,
@@ -184,6 +190,26 @@ LARGO_MAX_URL = 2000
 # otros equipos de casa ni en el propio CAIN.
 SUFIJOS_LOCALES = (".localhost", ".local", ".lan", ".home", ".internal", ".intranet",
                    ".corp", ".home.arpa")
+
+
+# ─── Spotify (Fase 10.4) ─────────────────────────────────────────────────────
+
+# Los únicos sitios con los que habla el conector. Las URLs que devuelve la
+# API ("next", "href") nunca se siguen: cada petición se arma con estas bases.
+SPOTIFY_URL_AUTORIZAR = "https://accounts.spotify.com/authorize"
+SPOTIFY_URL_TOKEN     = "https://accounts.spotify.com/api/token"
+SPOTIFY_URL_API       = "https://api.spotify.com/v1"
+
+# Mínimo privilegio: leer y controlar la reproducción, leer listas y gustos.
+# Ninguno de escritura sobre listas ni biblioteca: aunque hubiera un error,
+# la API no dejaría a CAIN borrar ni cambiar nada tuyo.
+SPOTIFY_PERMISOS = (
+    "user-read-playback-state", "user-modify-playback-state", "user-read-currently-playing",
+    "playlist-read-private", "playlist-read-collaborative", "user-top-read", "user-library-read",
+)
+
+# Si no hay dispositivo, CAIN abre la app de escritorio y espera a que aparezca.
+SPOTIFY_ESPERA_DISPOSITIVO = 15   # segundos
 
 
 # ─── Límites ─────────────────────────────────────────────────────────────────

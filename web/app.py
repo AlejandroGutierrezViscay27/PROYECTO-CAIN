@@ -8,6 +8,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.requests import Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from dotenv import load_dotenv
+import html
 import json
 import asyncio
 from urllib.parse import quote
@@ -19,6 +20,7 @@ from core.agent import Cain
 from core import executor
 from core.arnes import auditoria, reglas
 from core.emocion import extraer_animo
+from so.conectores import ErrorConector
 from voice.stt import FasterWhisperSTT
 from voice.tts import crear_tts
 from voice.limpieza import limpiar_para_voz
@@ -223,6 +225,55 @@ async def servir_proyecto_aislado(firma: str, nombre: str, ruta: str):
     if not acceso.firma_valida(nombre, firma) or not archivo:
         return JSONResponse({"error": "Archivo no encontrado"}, status_code=404)
     return FileResponse(archivo, headers=CABECERAS_PROYECTO)
+
+
+# ─── Spotify (Fase 10.4) ─────────────────────────────────────────────────────
+# Conectar la cuenta es darle a CAIN acceso a ella: solo desde el propio PC,
+# aunque otro dispositivo tenga el token de CAIN.
+
+PAGINA_SPOTIFY = """<!doctype html><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CAIN · Spotify</title>
+<body style="background:#0b0b10;color:#ddd;font-family:sans-serif;padding:2rem;max-width:32rem;margin:auto">
+<h1>{titulo}</h1><p>{texto}</p>
+</body>"""
+
+
+def _pagina_spotify(titulo, texto, estado=200):
+    # La URL de vuelta lleva el código de autorización: que no quede en caché.
+    return HTMLResponse(
+        PAGINA_SPOTIFY.format(titulo=html.escape(titulo), texto=html.escape(texto)),
+        status_code=estado, headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
+    )
+
+
+@app.get("/spotify/conectar")
+async def spotify_conectar(request: Request):
+    if not acceso.acceso_local(request):
+        return _pagina_spotify("🛡️ Solo desde el PC", "Spotify se conecta desde el navegador del propio PC.", 403)
+    if not cain_agent.spotify:
+        return _pagina_spotify("🎵 Spotify sin configurar",
+                               "Falta SPOTIFY_CLIENT_ID en el .env (ver FASE10_PLAN.md §15).", 404)
+    return RedirectResponse(cain_agent.spotify.url_autorizacion())
+
+
+@app.get("/spotify/callback")
+async def spotify_callback(request: Request):
+    if not acceso.acceso_local(request):
+        return _pagina_spotify("🛡️ Solo desde el PC", "Spotify se conecta desde el navegador del propio PC.", 403)
+    if not cain_agent.spotify:
+        return _pagina_spotify("🎵 Spotify sin configurar", "Falta SPOTIFY_CLIENT_ID en el .env.", 404)
+    error = request.query_params.get("error")
+    if error:
+        return _pagina_spotify("🎵 Spotify no se conectó", f"Spotify respondió: {error[:100]}", 400)
+    try:
+        await asyncio.get_running_loop().run_in_executor(
+            pool, cain_agent.spotify.completar_autorizacion,
+            request.query_params.get("code"), request.query_params.get("state"))
+    except ErrorConector as e:
+        return _pagina_spotify("🎵 Spotify no se conectó", f"{e}.", 400)
+    auditoria.registrar("ejecutado", "spotify_conectar", origen="local")
+    return _pagina_spotify("✅ Spotify conectado", "Ya puedes cerrar esta pestaña y pedirle música a CAIN.")
 
 
 # ─── WebSocket ───────────────────────────────────────────────────────────────

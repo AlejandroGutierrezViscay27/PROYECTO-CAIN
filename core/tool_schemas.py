@@ -28,6 +28,12 @@ Analiza el mensaje del usuario y decide:
   vídeo), controlar lo que suena ("pausa", "pon la siguiente canción",
   "la anterior") o cambiar el volumen, y esas herramientas están
   disponibles → invócalas.
+- Si habla de música y las herramientas spotify_* están disponibles (qué
+  suena, pon una canción, un artista, un álbum, una de sus listas o sus
+  canciones con Me gusta,
+  pausa o reanuda la música, "para la música" (del verbo parar), la
+  siguiente canción, aleatorio, sugiéreme música) → usa esas, no
+  sistema_multimedia.
 - Si es conversación normal, una pregunta general, o pide un EJEMPLO
   o EXPLICACIÓN de cómo hacer algo (sin pedir que tú lo hagas ahora)
   → NO invoques ninguna herramienta.
@@ -249,7 +255,11 @@ TOOLS_SO = [
         "type": "function",
         "function": {
             "name": "sistema_multimedia",
-            "description": "Controla lo que esté sonando en el PC (Spotify, un vídeo...): pausar o reanudar, siguiente, anterior.",
+            "description": (
+                "Controla lo que esté sonando en el PC (música o un vídeo): pausar o reanudar, "
+                "siguiente canción, anterior. Solo si en la lista también aparece spotify_control, "
+                "la música va por spotify_control y esta queda para los vídeos."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -279,6 +289,121 @@ TOOLS_SO = [
                     "valor":  {"type": "integer", "minimum": 0, "maximum": 100},
                 },
                 "required": ["accion"],
+            },
+        },
+    },
+]
+
+# Fase 10.4 — Spotify por su API oficial. Solo se le ofrecen al LLM si hay
+# SPOTIFY_CLIENT_ID en el .env. El LLM nunca da un URI ni un id: da qué
+# buscar, y lo que suena sale de la respuesta de la API.
+TOOLS_SPOTIFY = [
+    {
+        "type": "function",
+        "function": {
+            "name": "spotify_que_suena",
+            "description": "Dice qué está sonando en Spotify ahora (canción, artista, en qué dispositivo, si está en pausa).",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "spotify_mis_listas",
+            "description": "Muestra las listas de reproducción de Spotify del usuario.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "spotify_buscar",
+            "description": "Busca en Spotify y muestra resultados SIN reproducir nada ('busca canciones de X', '¿qué álbumes tiene X?').",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "tipo":     {"type": "string", "enum": ["cancion", "artista", "album", "lista"]},
+                    "consulta": {"type": "string", "description": "Qué buscar, p. ej. 'Bohemian Rhapsody Queen'"},
+                },
+                "required": ["tipo", "consulta"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "spotify_reproducir",
+            "description": (
+                "Pone algo en Spotify: una canción, un artista, un álbum, una lista del usuario "
+                "o sus canciones con Me gusta."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "tipo": {
+                        "type": "string",
+                        "enum": ["cancion", "artista", "album", "mi_lista", "me_gusta", "lista"],
+                        "description": (
+                            "mi_lista = una lista DEL usuario por su nombre ('pon mi lista de estudio', 'la del gym'); "
+                            "me_gusta = sus canciones con Me gusta / guardadas / su biblioteca, o cuando dice "
+                            "'de mi lista' o 'de mis canciones' sin nombrar una lista "
+                            "('pon algo de Daddy Yankee de mis me gusta' → consulta 'Daddy Yankee'); "
+                            "lista = SOLO una lista pública de otros que el usuario nombra expresamente "
+                            "('pon la lista Top 50 Colombia'). Nunca uses lista para algo del usuario."
+                        ),
+                    },
+                    "consulta": {
+                        "type": "string",
+                        "description": (
+                            "Nombre de la canción (con el artista si lo dice), del artista, del álbum o de la lista. "
+                            "Con me_gusta, opcional: el artista o canción para filtrar."
+                        ),
+                    },
+                },
+                "required": ["tipo"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "spotify_control",
+            "description": (
+                "Controla la música que suena en Spotify. Úsala para 'pausa' o 'para la música', "
+                "'sigue', 'dale play', 'pon la siguiente canción', 'salta esta', 'pasa la canción', "
+                "'la anterior', 'activa o quita el aleatorio'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "accion": {
+                        "type": "string",
+                        "enum": ["pausar", "reanudar", "siguiente", "anterior", "aleatorio_si", "aleatorio_no"],
+                        "description": (
+                            "pausar = pausar o parar la música; reanudar = seguir, continuar o 'dale play'; "
+                            "siguiente = pasar o saltar la canción; anterior = volver a la anterior."
+                        ),
+                    },
+                },
+                "required": ["accion"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "spotify_sugerir",
+            "description": (
+                "Sugiere canciones según lo que el usuario escucha en Spotify ('recomiéndame música', "
+                "'pon algo para concentrarme'). poner = true si pide que suene; false si solo pide ideas."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "peticion": {"type": "string", "description": "Qué tipo de música pide, en sus palabras"},
+                    "poner":    {"type": "boolean"},
+                },
+                "required": ["peticion"],
             },
         },
     },

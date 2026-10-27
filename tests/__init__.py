@@ -23,6 +23,11 @@ auditoria.ARCHIVO_AUDITORIA = os.path.join(_DATA_PRUEBAS, "auditoria.jsonl")
 reglas.CARPETA_ESPACIO      = os.path.join(_DATA_PRUEBAS, "espacio")
 reglas.CARPETA_PROYECTOS    = os.path.join(_DATA_PRUEBAS, "proyectos")
 
+# Fase 10.4: el token de Spotify (equivale a acceso a la cuenta).
+from so.conectores import spotify as conector_spotify
+
+conector_spotify.ARCHIVO_TOKEN = os.path.join(_DATA_PRUEBAS, "spotify_token.json")
+
 
 def mismo_llm_para_todos(clase):
     """Sustituto de crear_llms(): una sola instancia de prueba para todos los roles."""

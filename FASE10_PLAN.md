@@ -1,7 +1,8 @@
 # Fase 10 — Control del sistema operativo: plan y arnés de seguridad
 
-> Estado: **10.0, 10.1 y 10.2 implementadas** (arnés, observar el sistema,
-> abrir apps y URLs, multimedia y volumen; 178 pruebas en verde). Decisiones de la primera ronda tomadas (§11). WhatsApp y el
+> Estado: **10.0, 10.1, 10.2 y 10.4 implementadas** (arnés, observar el
+> sistema, abrir apps y URLs, multimedia y volumen, Spotify por API; 251
+> pruebas en verde). Decisiones de la primera ronda tomadas (§11). WhatsApp y el
 > teclado/ratón genéricos están en **10.P — Pendientes de diseño** (§12).
 
 ## 0. Principio rector
@@ -413,7 +414,7 @@ pero tarda en arrancar.
 | ~~10.1~~ | ~~Observar: ventanas abiertas, app activa, info del sistema~~ | N0 | ✅ hecho (§13) |
 | ~~10.2~~ | ~~Abrir apps de la lista blanca (navegador, Spotify) y URLs http(s); volumen y multimedia~~ | N1 | ✅ hecho (§14) |
 | 10.3 | Navegador de CAIN (Playwright + perfil propio) con pestañas + **YouTube** | N1 | listo |
-| 10.4 | **Spotify** por API oficial | N1 | listo (te guío con la app de developer.spotify.com) |
+| ~~10.4~~ | ~~**Spotify** por API oficial~~ | N1 | ✅ hecho (§15) |
 | 10.5 | **Análisis de documentos**: Excel y CSV primero; después PDF y Word | N0 | listo |
 | 10.6 | Archivos del usuario: listar, mover, organizar, Papelera | N3 | listo (con §11.3 recomendado) |
 | 10.8 | Código generado con integridad baja | — | listo |
@@ -562,3 +563,96 @@ rechaza porque no tiene nivel declarado en `reglas.py`.
 - **Límite conocido**: play/pausa es una sola tecla (alterna), así que
   "pausa" con nada sonando reanuda. Se resuelve con Spotify por API (10.4),
   que sabe qué está sonando.
+
+---
+
+## 15. Fase 10.4 — hecho
+
+- **Herramientas** (todas N0/N1, se pueden pedir desde el móvil; solo se
+  ofrecen al LLM si hay `SPOTIFY_CLIENT_ID` en el `.env`):
+  `spotify_que_suena`, `spotify_mis_listas`, `spotify_buscar` (N0);
+  `spotify_reproducir` (canción, artista, álbum, lista pública o **una
+  lista tuya por su nombre**), `spotify_control` (pausar, reanudar,
+  siguiente, anterior, aleatorio) y `spotify_sugerir` (N1).
+- **Conector** `so/conectores/spotify.py` (httpx, sin dependencias nuevas):
+  - OAuth "Authorization Code con **PKCE**", sin secreto de cliente. El
+    `state` se gasta al usarse y caduca a los 10 minutos: una web no puede
+    colarle a CAIN el código de otra cuenta.
+  - `/spotify/conectar` y `/spotify/callback` responden **solo desde el
+    propio PC** (aunque otro dispositivo tenga el token de CAIN), con
+    `Cache-Control: no-store`. El error que trae la URL se escapa.
+  - Token en `data/spotify_token.json` (escritura atómica). Se renueva solo;
+    si Spotify rota el refresh token se guarda el nuevo; si el permiso se
+    revocó, se borra y CAIN pide reconectar. Nunca va al LLM ni a la
+    auditoría. La revisión del código generado avisa si lo nombra.
+  - Solo habla con `accounts.spotify.com` y `api.spotify.com`
+    (`reglas.SPOTIFY_URL_*`). Las URLs que trae la API (`next`, `href`)
+    no se siguen; las rutas son constantes y los datos van en parámetros.
+  - Permisos mínimos (`reglas.SPOTIFY_PERMISOS`): ninguno de escritura
+    sobre listas ni biblioteca.
+- **`core/arnes/spotify.py`**: el LLM da opciones cerradas y texto para
+  buscar, **nunca un URI**. Lo que suena es siempre un URI que devolvió la
+  API y que además se valida (`spotify:<tipo>:<22 caracteres>`, del tipo
+  pedido).
+- **Sugerencias**: los nombres de lo que más escuchas van al LLM marcados
+  como datos; de su respuesta solo se toman título y artista como texto,
+  cada uno se busca en la API y solo suena lo que existe (si trae un
+  `uri`, se ignora).
+- **Sin dispositivo activo**: se usa el que haya (el PC primero); si no hay
+  ninguno y hay control del sistema, CAIN abre la app de escritorio (lista
+  blanca, auditado) y espera hasta 15 s a que aparezca.
+- **Resuelve el límite de la 10.2**: "pausa" con nada sonando ya no
+  reanuda, porque la API sabe qué está sonando.
+- **Cambios de la API de 2026** (modo desarrollo): la búsqueda da como
+  máximo 10 resultados, las listas llaman `items` a lo que era `tracks` y
+  ya no existe `artists/{id}/top-tracks` (un artista se pone como
+  contexto). El código ya lo tiene en cuenta.
+- **Pruebas**: 73 nuevas (251 en total) contra un Spotify falso
+  (`httpx.MockTransport`): state inventado, reusado o caducado, rutas desde
+  otro dispositivo y por DNS rebinding, URIs malformados de la API o del
+  LLM, bucles de 401, URLs `next` hacia otro sitio, token fuera del
+  historial, de la auditoría y del prompt.
+- **Enrutador real**: 22 de 22 con Spotify activo, y 5 de 5 sin él (la
+  música vuelve a la tecla multimedia). Hubo que afinar: "para la música"
+  se leía como preposición, "salta esta" iba a la tecla multimedia y la
+  primera redacción de `sistema_multimedia` hacía que, sin Spotify,
+  "pon la siguiente canción" abriera la app.
+- **Probado con la cuenta real**: listas, búsqueda, artistas y canciones
+  concretas funcionan. Dos fallos encontrados y corregidos:
+  1. Las órdenes del reproductor (pausar, anterior...) **sí se ejecutaban**,
+     pero CAIN respondía "Spotify devolvió una respuesta que no entiendo":
+     la API real responde 200 con un id en texto plano, no JSON. Ahora las
+     órdenes no leen el cuerpo; el Spotify falso de las pruebas responde
+     igual que el real (sin el arreglo, fallan 10 pruebas).
+  2. **El enrutador solo veía el mensaje actual**: "pausa" tras "pon mi
+     lista del gym" no sabía que se hablaba de música, y había que decir
+     "en Spotify". Ahora el enrutador recibe el **contexto reciente**
+     (últimos 6 turnos, 10 minutos de vigencia): las palabras del usuario
+     y el nombre de la herramienta que se usó, **nunca su resultado**
+     (es contenido de fuera, y así no puede decidir la siguiente acción;
+     hay una prueba con un título de canción que trae una inyección). Si el
+     tema cambia, se le pide ignorarlo. La conversación recibe las acciones
+     recientes para seguir el hilo ("¿te gusta esa?"). "Olvida" lo borra.
+     Enrutador real en conversaciones de varios turnos: 21 de 21 ("pausa",
+     "la anterior", "otra de ella", "súbele", "para", y vuelta a la
+     charla normal sin arrastrar el tema).
+  3. **Segunda ronda con la cuenta real** (vista en `data/auditoria.jsonl`):
+     - "De mis me gusta" no tenía herramienta: iba a `spotify_que_suena`, y
+       "de esa lista" buscaba una **lista pública** llamada "mi lista de me
+       gusta" (de un desconocido). Nuevo tipo `me_gusta` (tus canciones
+       guardadas, `GET /me/tracks`, filtrable por artista o título, solo
+       canciones con URI de la API). `lista` queda solo para listas
+       públicas nombradas expresamente. Si `mi_lista` no encuentra la
+       lista, busca esas palabras en tus Me gusta y lo dice (con
+       gpt-4o-mini, "esa lista" seguía yendo a `mi_lista` aunque el prompt
+       dijera otra cosa: el respaldo en código lo resuelve siempre).
+     - Una canción suelta dejaba a Spotify sin contexto y "siguiente" caía
+       en su radio automática. Ahora suena **dentro de su álbum**
+       (`offset`), y siguiente/anterior siguen el disco.
+     - "Anterior" puede solo reiniciar la canción, como el botón de la app:
+       ahora se lleva al inicio (`seek` a 0) y luego retrocede. Si Spotify
+       lo impide (`actions.disallows`), CAIN lo dice en vez de fingir.
+     - El contexto del enrutador lleva también los argumentos de la
+       herramienta (los escribió el enrutador, no vienen de fuera).
+     Enrutador real: 32 de 32 en tres rondas, con la conversación tal como
+     pasó.

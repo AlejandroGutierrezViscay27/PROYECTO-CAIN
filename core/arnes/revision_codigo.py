@@ -56,7 +56,8 @@ METODOS = {"unlink": "borra archivos", "rmtree": "borra carpetas enteras"}
 OFUSCACION = {"eval", "exec", "compile", "__import__"}
 
 _RUTA_ABSOLUTA = re.compile(r"^(?:[A-Za-z]:[\\/]|\\\\)")
-_PISTAS = ("system32", "appdata", ".env", ".ssh", "program files", "proyecto-cain")
+_PISTAS = ("system32", "appdata", ".env", ".ssh", "program files", "proyecto-cain",
+           "spotify_token")
 
 
 def _revisar_literal(texto, avisos):
