@@ -199,6 +199,8 @@ Reglas de calidad visual:
 - Si el proyecto es 3D, usa Three.js via CDN:
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 - Si necesita gráficas, usa Chart.js via CDN
+- La página corre aislada: no uses localStorage, sessionStorage, cookies ni IndexedDB
+  (fallan); guarda el estado en variables
 - El resultado debe verse como una aplicación real, no como un ejercicio básico"""
 
     elif tipo == "python":

@@ -1,5 +1,14 @@
 import os
+import shutil
 import time
+
+from send2trash import send2trash
+
+from core.arnes import reglas
+
+
+# Las rutas que reciben estas funciones ya pasaron por arnes.rutas.resolver():
+# aquí no se valida nada, se ejecuta. Nunca llamarlas con una ruta del LLM.
 
 
 # ─── Utilidades internas ─────────────────────────────────────────────────────
@@ -27,51 +36,54 @@ def normalizar_nombre_txt(nombre):
     return nombre
 
 
+def respaldar(ruta, espacio):
+    """
+    Copia la versión actual a <espacio>/.respaldos/ antes de pisarla.
+    Retorna la ruta de la copia.
+    """
+    carpeta = os.path.join(espacio, reglas.CARPETA_RESPALDOS)
+    os.makedirs(carpeta, exist_ok=True)
+    base, extension = os.path.splitext(os.path.basename(ruta))
+    copia = evitar_sobrescritura(os.path.join(carpeta, f"{base}_{time.strftime('%Y%m%d-%H%M%S')}{extension}"))
+    shutil.copy2(ruta, copia)
+    return copia
+
+
 # ─── Operaciones de archivo ──────────────────────────────────────────────────
 
-def crear_archivo(nombre, contenido):
+def crear_archivo(ruta, contenido):
     try:
-        with open(nombre, "w", encoding="utf-8") as f:
+        os.makedirs(os.path.dirname(ruta), exist_ok=True)
+        # "x": falla si el archivo apareció entre la comprobación y la escritura.
+        with open(ruta, "x", encoding="utf-8") as f:
             f.write(contenido)
-        return f"Archivo '{nombre}' creado correctamente."
+        return True, None
     except Exception as e:
-        return f"Error al crear archivo: {str(e)}"
+        return False, str(e)
 
 
-def leer_archivo(nombre):
+def leer_archivo(ruta):
+    """(contenido, recortado) — como mucho reglas.BYTES_MAX_LECTURA."""
+    with open(ruta, "r", encoding="utf-8", errors="replace") as f:
+        contenido = f.read(reglas.BYTES_MAX_LECTURA + 1)
+    if len(contenido) > reglas.BYTES_MAX_LECTURA:
+        return contenido[:reglas.BYTES_MAX_LECTURA], True
+    return contenido, False
+
+
+def mover_a_papelera(ruta):
+    """Nunca borra para siempre: el archivo se puede recuperar de la Papelera."""
     try:
-        with open(nombre, "r", encoding="utf-8") as f:
-            contenido = f.read()
-        return f"📖 Contenido de '{nombre}':\n\n{contenido}"
-    except FileNotFoundError:
-        return f"🎭 No encontré el archivo '{nombre}'."
+        send2trash(ruta)
+        return True, None
     except Exception as e:
-        return f"Error al leer archivo: {str(e)}"
+        return False, str(e)
 
 
-def borrar_archivo(nombre):
+def editar_archivo(ruta, contenido):
     try:
-        if os.path.exists(nombre):
-            os.remove(nombre)
-            return f"🗑️ Archivo '{nombre}' eliminado correctamente."
-        return f"🎭 El archivo '{nombre}' no existe."
-    except Exception as e:
-        return f"Error al eliminar archivo: {str(e)}"
-
-
-def editar_archivo(nombre, contenido):
-    try:
-        with open(nombre, "w", encoding="utf-8") as f:
+        with open(ruta, "w", encoding="utf-8") as f:
             f.write(contenido)
-        return f"✏️ Archivo '{nombre}' actualizado."
+        return True, None
     except Exception as e:
-        return f"Error en edición: {str(e)}"
-
-
-def agregar_a_archivo(nombre, contenido):
-    try:
-        with open(nombre, "a", encoding="utf-8") as f:
-            f.write("\n\n" + contenido)
-        return f"✏️ Contenido añadido a '{nombre}'."
-    except Exception as e:
-        return f"Error al editar archivo: {str(e)}"
+        return False, str(e)

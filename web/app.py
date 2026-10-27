@@ -10,12 +10,14 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from dotenv import load_dotenv
 import json
 import asyncio
+from urllib.parse import quote
 from concurrent.futures import ThreadPoolExecutor
 
 load_dotenv()
 
 from core.agent import Cain
 from core import executor
+from core.arnes import auditoria, reglas
 from core.emocion import extraer_animo
 from voice.stt import FasterWhisperSTT
 from voice.tts import crear_tts
@@ -70,7 +72,8 @@ muestra la consola de CAIN al arrancar (<code>/?token=...</code>).</p>
 
 @app.middleware("http")
 async def control_de_acceso(request: Request, call_next):
-    if not acceso.autorizado(request):
+    # /p/<firma>/... lleva su propio permiso (ver servir_proyecto_aislado).
+    if not request.url.path.startswith("/p/") and not acceso.autorizado(request):
         if request.url.path.startswith("/api/"):
             return JSONResponse({"error": "No autorizado"}, status_code=401)
         return HTMLResponse(PAGINA_SIN_ACCESO, status_code=401)
@@ -147,9 +150,15 @@ async def get_uso():
     })
 
 
+@app.get("/api/auditoria")
+async def get_auditoria():
+    """Lo último que el arnés dejó (o no) hacer a CAIN."""
+    return JSONResponse({"eventos": auditoria.ultimos(100)})
+
+
 @app.get("/api/proyectos")
 async def get_proyectos():
-    carpeta = executor.CARPETA_PROYECTOS
+    carpeta = reglas.CARPETA_PROYECTOS
     if not os.path.exists(carpeta):
         return JSONResponse({"proyectos": []})
     proyectos = []
@@ -185,42 +194,63 @@ async def abrir_proyecto(nombre: str):
     return JSONResponse({"tipo": "python", "archivo": py_file, "codigo": codigo})
 
 
+# Un proyecto web es código generado por el LLM: corre aislado (origen opaco)
+# para que su JavaScript no pueda usar la sesión de CAIN — ni su cookie, ni su
+# WebSocket (que rechaza el Origin "null"), ni leer /api/.
+CABECERAS_PROYECTO = {
+    "Content-Security-Policy": (
+        "sandbox allow-scripts allow-forms allow-popups allow-modals "
+        "allow-pointer-lock allow-downloads"
+    ),
+    # Desde el origen opaco, los módulos JS y los fetch del propio proyecto son
+    # peticiones "de otro origen": sin esto el navegador las bloquea.
+    "Access-Control-Allow-Origin": "*",
+    "X-Content-Type-Options": "nosniff",
+}
+
+
 @app.get("/proyectos/{nombre}/{ruta:path}")
 async def servir_proyecto(nombre: str, ruta: str):
-    archivo = executor.archivo_de_proyecto(nombre, ruta)
-    if not archivo:
+    """URL estable (la que guardan el chat y la lista): lleva a la versión aislada."""
+    if not executor.archivo_de_proyecto(nombre, ruta):
         return JSONResponse({"error": "Archivo no encontrado"}, status_code=404)
-    return FileResponse(archivo)
+    return RedirectResponse(f"/p/{acceso.firma_proyecto(nombre)}/{quote(nombre)}/{quote(ruta)}")
+
+
+@app.get("/p/{firma}/{nombre}/{ruta:path}")
+async def servir_proyecto_aislado(firma: str, nombre: str, ruta: str):
+    archivo = executor.archivo_de_proyecto(nombre, ruta)
+    if not acceso.firma_valida(nombre, firma) or not archivo:
+        return JSONResponse({"error": "Archivo no encontrado"}, status_code=404)
+    return FileResponse(archivo, headers=CABECERAS_PROYECTO)
 
 
 # ─── WebSocket ───────────────────────────────────────────────────────────────
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    # El middleware HTTP no ve los WebSockets: el acceso se revisa aquí.
-    if not acceso.autorizado(websocket):
+    # El middleware HTTP no ve los WebSockets: el acceso se revisa aquí. Y el
+    # origen: si no, cualquier página abierta en el navegador podría usarlo.
+    if not acceso.autorizado(websocket) or not acceso.origen_permitido(websocket):
         await websocket.close(code=1008)
         return
 
     await websocket.accept()
-    dispositivo = gestor.conectar(websocket)
+    dispositivo = gestor.conectar(websocket, es_local=acceso.acceso_local(websocket))
     loop        = asyncio.get_running_loop()
 
     async def enviar_plan_y_esperar(plan):
         dispositivo.vaciar_confirmaciones()
-        await gestor.enviar(dispositivo, {
-            "tipo":     "confirmacion",
-            "archivos": plan["archivos"],
-            "comando":  plan["comando"],
-            "nombre":   plan["nombre"],
-        })
+        # "clase": "proyecto" (nombre, archivos, comando) o "accion" (titulo,
+        # detalle). Ambos con "nivel" y "advertencias" (ver core/arnes).
+        await gestor.enviar(dispositivo, {"clase": "proyecto", **plan, "tipo": "confirmacion"})
         try:
             return await asyncio.wait_for(dispositivo.confirmaciones.get(), timeout=300)
         except asyncio.TimeoutError:
             return False
 
     def confirmar_fn(plan):
-        # La confirmación la da quien pidió el proyecto, no cualquier dispositivo.
+        # La confirmación la da quien hizo la petición, no cualquier dispositivo.
         future = asyncio.run_coroutine_threadsafe(enviar_plan_y_esperar(plan), loop)
         return future.result(timeout=310)
 
@@ -233,7 +263,8 @@ async def websocket_endpoint(websocket: WebSocket):
         # Los demás dispositivos ven lo que se dijo; este ya lo pintó.
         await gestor.difundir({"tipo": "mensaje_usuario", "contenido": mensaje}, excepto=dispositivo)
 
-        canal = "voz" if hablar else "texto"
+        canal  = "voz" if hablar else "texto"
+        origen = "local" if dispositivo.es_local else "remoto"
         # Proyecto que CAIN creó en este turno (url servida en /proyectos/).
         proyectos = []
         # Un turno a la vez: si otro dispositivo está hablando con CAIN, este
@@ -244,7 +275,7 @@ async def websocket_endpoint(websocket: WebSocket):
             cain_agent._estado_fn    = estado_fn
             cain_agent._abrir_fn     = proyectos.append
             try:
-                respuesta = await loop.run_in_executor(pool, cain_agent.chat, mensaje, canal)
+                respuesta = await loop.run_in_executor(pool, cain_agent.chat, mensaje, canal, origen)
             except Exception as e:
                 # Al correr en una tarea aparte, una excepción aquí no la ve
                 # el try/except del bucle principal — hay que avisar a los
@@ -334,7 +365,8 @@ async def websocket_endpoint(websocket: WebSocket):
             tipo_msg = payload.get("tipo", "mensaje")
 
             if tipo_msg == "confirmacion_respuesta":
-                confirmado = payload.get("confirmado", False)
+                # Solo un true explícito confirma (no "si", ni 1, ni "false").
+                confirmado = payload.get("confirmado") is True
                 print(f"[DEBUG] Confirmacion del dispositivo {dispositivo.numero}: {confirmado}")
                 await dispositivo.confirmaciones.put(confirmado)
                 continue

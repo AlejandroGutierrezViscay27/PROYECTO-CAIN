@@ -11,8 +11,8 @@ async function cargarProyectos() {
     }
 
     lista.innerHTML = data.proyectos.map(p => `
-      <div class="proyecto-item" onclick="abrirProyecto('${p.nombre}', '${p.tipo}')">
-        <div class="proyecto-nombre">${p.nombre}</div>
+      <div class="proyecto-item" onclick="abrirProyecto(${escapeHtml(JSON.stringify(p.nombre))}, ${escapeHtml(JSON.stringify(p.tipo))})">
+        <div class="proyecto-nombre">${escapeHtml(p.nombre)}</div>
         <div class="proyecto-tipo">${p.tipo === "web" ? "🌐 web" : "🐍 python"}</div>
       </div>
     `).join("");

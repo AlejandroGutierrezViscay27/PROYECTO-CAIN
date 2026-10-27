@@ -741,3 +741,20 @@ html, body {
 }
 
 .proyecto-item:hover::after { opacity: 1; }
+/* ─── Confirmación del arnés ─────────────────────────────────────────── */
+.confirm-nivel {
+  font-size: 11px;
+  padding: 0.1rem 0.45rem;
+  margin-left: 0.4rem;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--accent);
+  vertical-align: middle;
+}
+.confirm-aviso {
+  padding: 0.3rem 0.6rem;
+  margin-bottom: 0.3rem;
+  border-left: 2px solid var(--accent);
+  background: var(--accent-glow);
+  font-size: 13px;
+}

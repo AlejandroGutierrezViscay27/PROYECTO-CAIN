@@ -13,9 +13,11 @@ import json
 
 class Dispositivo:
 
-    def __init__(self, websocket, numero):
+    def __init__(self, websocket, numero, es_local=False):
         self.websocket      = websocket
         self.numero         = numero
+        # El propio PC o un dispositivo de la red: el arnés limita lo remoto.
+        self.es_local       = es_local
         self.confirmaciones = asyncio.Queue()
 
     def vaciar_confirmaciones(self):
@@ -31,8 +33,8 @@ class GestorConexiones:
         self.turno        = asyncio.Lock()
         self._contador    = itertools.count(1)
 
-    def conectar(self, websocket):
-        dispositivo = Dispositivo(websocket, next(self._contador))
+    def conectar(self, websocket, es_local=False):
+        dispositivo = Dispositivo(websocket, next(self._contador), es_local)
         self.dispositivos.append(dispositivo)
         print(f"[DEBUG] Dispositivo {dispositivo.numero} conectado ({len(self.dispositivos)} en total)")
         return dispositivo

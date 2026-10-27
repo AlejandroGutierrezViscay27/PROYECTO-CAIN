@@ -12,10 +12,14 @@ from unittest import mock
 from fastapi.testclient import TestClient
 
 from core import executor
+from core.arnes import reglas
 from web import acceso
 
 TOKEN = "token-de-prueba"
 LOCAL = ("127.0.0.1", 50000)
+# Desde el PC se entra sin token solo si además se pide por un nombre de
+# loopback (el TestClient manda "Host: testserver" si no se le dice nada).
+HOST_LOCAL = {"host": "localhost"}
 
 
 class CainFalso:
@@ -32,7 +36,9 @@ class CainFalso:
         self._confirmar_fn = None
         self._estado_fn    = None
 
-    def chat(self, mensaje, canal="texto"):
+    def chat(self, mensaje, canal="texto", origen="local"):
+        if mensaje == "de donde":
+            return f"origen: {origen}"
         if mensaje == "haz un proyecto":
             confirmado = self._confirmar_fn({"archivos": ["main.py"], "comando": "python main.py", "nombre": "demo"})
             return f"confirmado: {confirmado}"
@@ -91,7 +97,7 @@ class TestAcceso(unittest.TestCase):
 class TestAccesoHTTP(unittest.TestCase):
 
     def test_localhost_entra_sin_token(self):
-        cliente = TestClient(app_mod.app, client=LOCAL)
+        cliente = TestClient(app_mod.app, client=LOCAL, headers=HOST_LOCAL)
         self.assertEqual(cliente.get("/api/memory").status_code, 200)
 
     def test_remoto_sin_token_no_entra(self):
@@ -136,13 +142,13 @@ class TestEstaticos(unittest.TestCase):
     def test_js_y_css_se_revalidan_siempre(self):
         # Si el navegador se queda con el JS viejo, el HTML nuevo queda a medias
         # (pasó con el botón del panel en el móvil).
-        cliente = TestClient(app_mod.app, client=LOCAL)
+        cliente = TestClient(app_mod.app, client=LOCAL, headers=HOST_LOCAL)
         for ruta in ("/static/style.css", "/static/js/main.js"):
             self.assertEqual(cliente.get(ruta).headers["cache-control"], "no-cache")
 
     def test_index_pide_js_y_css_con_version(self):
         # Una URL nueva por versión: ninguna caché puede servir el JS viejo.
-        cliente = TestClient(app_mod.app, client=LOCAL)
+        cliente = TestClient(app_mod.app, client=LOCAL, headers=HOST_LOCAL)
         html    = cliente.get("/").text
         version = app_mod.templates.env.globals["v"]
         self.assertIn(f'/static/js/main.js?v={version}"', html)
@@ -156,7 +162,7 @@ class TestEstaticos(unittest.TestCase):
 class TestHistorial(unittest.TestCase):
 
     def test_historial_sin_etiqueta_de_animo(self):
-        cliente  = TestClient(app_mod.app, client=LOCAL)
+        cliente  = TestClient(app_mod.app, client=LOCAL, headers=HOST_LOCAL)
         mensajes = cliente.get("/api/historial").json()["mensajes"]
         self.assertEqual(mensajes, [
             {"rol": "user", "contenido": "hola"},
@@ -169,7 +175,7 @@ class TestHistorial(unittest.TestCase):
 class TestVariosDispositivos(unittest.TestCase):
 
     def test_la_respuesta_llega_a_todos_los_dispositivos(self):
-        with TestClient(app_mod.app, client=LOCAL) as cliente:
+        with TestClient(app_mod.app, client=LOCAL, headers=HOST_LOCAL) as cliente:
             with cliente.websocket_connect("/ws") as pc, cliente.websocket_connect("/ws") as movil:
                 pc.send_json({"mensaje": "hola"})
 
@@ -183,7 +189,7 @@ class TestVariosDispositivos(unittest.TestCase):
                 self.assertFalse(respuesta["voz"])
 
     def test_la_confirmacion_va_solo_a_quien_pidio_el_proyecto(self):
-        with TestClient(app_mod.app, client=LOCAL) as cliente:
+        with TestClient(app_mod.app, client=LOCAL, headers=HOST_LOCAL) as cliente:
             with cliente.websocket_connect("/ws") as pc, cliente.websocket_connect("/ws") as movil:
                 movil.send_json({"mensaje": "haz un proyecto"})
                 self.assertEqual(recibir_hasta(movil, "confirmacion")[-1]["nombre"], "demo")
@@ -196,7 +202,7 @@ class TestVariosDispositivos(unittest.TestCase):
                 self.assertEqual(del_pc[-1]["contenido"], "confirmado: True")
 
     def test_el_proyecto_creado_se_abre_en_quien_lo_pidio(self):
-        with TestClient(app_mod.app, client=LOCAL) as cliente:
+        with TestClient(app_mod.app, client=LOCAL, headers=HOST_LOCAL) as cliente:
             with cliente.websocket_connect("/ws") as pc, cliente.websocket_connect("/ws") as movil:
                 movil.send_json({"mensaje": "haz una pagina"})
 
@@ -213,7 +219,7 @@ class TestVariosDispositivos(unittest.TestCase):
         self.assertIsNone(app_mod.cain_agent._abrir_fn)
 
     def test_respuesta_sin_proyecto(self):
-        with TestClient(app_mod.app, client=LOCAL) as cliente:
+        with TestClient(app_mod.app, client=LOCAL, headers=HOST_LOCAL) as cliente:
             with cliente.websocket_connect("/ws") as pc:
                 pc.send_json({"mensaje": "hola"})
                 respuesta = recibir_hasta(pc, "respuesta")[-1]
@@ -221,7 +227,7 @@ class TestVariosDispositivos(unittest.TestCase):
                 self.assertFalse(respuesta["abrir"])
 
     def test_si_quien_confirma_se_desconecta_el_turno_se_cancela(self):
-        with TestClient(app_mod.app, client=LOCAL) as cliente:
+        with TestClient(app_mod.app, client=LOCAL, headers=HOST_LOCAL) as cliente:
             with cliente.websocket_connect("/ws") as pc:
                 with cliente.websocket_connect("/ws") as movil:
                     movil.send_json({"mensaje": "haz un proyecto"})
@@ -243,7 +249,7 @@ class TestProyectos(unittest.TestCase):
             f.write("h1 {}")
         with open(os.path.join(self.base, "secreto.txt"), "w", encoding="utf-8") as f:
             f.write("no")
-        parche = mock.patch.object(executor, "CARPETA_PROYECTOS", self.base)
+        parche = mock.patch.object(reglas, "CARPETA_PROYECTOS", self.base)
         parche.start()
         self.addCleanup(parche.stop)
         self.addCleanup(shutil.rmtree, self.base)
@@ -275,7 +281,7 @@ class TestProyectos(unittest.TestCase):
         self.assertIsNone(error)
         self.assertRegex(url, r"^/proyectos/cubo_\d+/index\.html$")
         # Y el servidor de CAIN lo sirve en esa url.
-        cliente = TestClient(app_mod.app, client=LOCAL)
+        cliente = TestClient(app_mod.app, client=LOCAL, headers=HOST_LOCAL)
         self.assertEqual(cliente.get(url).text, "<h1>cubo</h1>")
 
     def test_proyecto_web_en_modo_terminal_abre_en_el_pc(self):
@@ -299,12 +305,87 @@ class TestProyectos(unittest.TestCase):
         self.assertRegex(url, r"^/proyectos/grafica_\d+/output\.png$")
 
     def test_abrir_devuelve_url_relativa_servida_por_cain(self):
-        cliente = TestClient(app_mod.app, client=LOCAL)
+        cliente = TestClient(app_mod.app, client=LOCAL, headers=HOST_LOCAL)
         datos   = cliente.post("/api/proyectos/web_1234/abrir").json()
         self.assertEqual(datos, {"tipo": "web", "url": "/proyectos/web_1234/index.html"})
         self.assertEqual(cliente.get(datos["url"]).text, "<h1>hola</h1>")
         self.assertEqual(cliente.get("/proyectos/web_1234/css/estilo.css").text, "h1 {}")
         self.assertEqual(cliente.get("/proyectos/web_1234/..%2Fsecreto.txt").status_code, 404)
+
+
+    def test_proyecto_se_sirve_aislado(self):
+        # Es código del LLM: con CSP sandbox su JavaScript no usa la sesión de CAIN.
+        cliente   = TestClient(app_mod.app, client=LOCAL, headers=HOST_LOCAL, follow_redirects=False)
+        respuesta = cliente.get("/proyectos/web_1234/css/estilo.css")
+        self.assertEqual(respuesta.status_code, 307)
+        firma = acceso.firma_proyecto("web_1234")
+        self.assertEqual(respuesta.headers["location"], f"/p/{firma}/web_1234/css/estilo.css")
+
+        aislado = cliente.get(respuesta.headers["location"])
+        self.assertEqual(aislado.text, "h1 {}")
+        self.assertTrue(aislado.headers["content-security-policy"].startswith("sandbox "))
+        self.assertNotIn("allow-same-origin", aislado.headers["content-security-policy"])
+
+    @mock.patch.dict(os.environ, {"CAIN_TOKEN": TOKEN})
+    def test_la_firma_es_el_permiso_de_la_url_aislada(self):
+        # El móvil carga el CSS del proyecto sin cookie (origen opaco): la firma basta,
+        # pero solo para ESE proyecto y sin salirse de él.
+        remoto = TestClient(app_mod.app)
+        firma  = acceso.firma_proyecto("web_1234")
+        self.assertEqual(remoto.get(f"/p/{firma}/web_1234/index.html").status_code, 200)
+        self.assertEqual(remoto.get(f"/p/{firma}/otro_1/index.html").status_code, 404)
+        self.assertEqual(remoto.get(f"/p/{'0' * 32}/web_1234/index.html").status_code, 404)
+        self.assertEqual(remoto.get(f"/p/{firma}/web_1234/..%2F..%2Fsecreto.txt").status_code, 404)
+        self.assertEqual(remoto.get("/proyectos/web_1234/index.html").status_code, 401)
+
+
+# ─── Arnés en la capa web (Fase 10.0) ────────────────────────────────────────
+
+@mock.patch.dict(os.environ, {"CAIN_TOKEN": TOKEN})
+class TestArnesWeb(unittest.TestCase):
+
+    def test_dns_rebinding_no_cuenta_como_local(self):
+        # Una web cuyo dominio resuelve a 127.0.0.1 llega "desde localhost".
+        cliente = TestClient(app_mod.app, client=LOCAL, headers={"host": "malvado.com:8000"})
+        self.assertEqual(cliente.get("/api/memory").status_code, 401)
+        for host in ("localhost:8000", "127.0.0.1:8000", "[::1]:8000"):
+            cliente = TestClient(app_mod.app, client=LOCAL, headers={"host": host})
+            self.assertEqual(cliente.get("/api/memory").status_code, 200, host)
+
+    def test_websocket_desde_otra_pagina_se_rechaza(self):
+        from starlette.websockets import WebSocketDisconnect
+        with TestClient(app_mod.app, client=LOCAL, headers=HOST_LOCAL) as cliente:
+            for origen in ("http://malvado.com", "null", "http://localhost:9999"):
+                with self.assertRaises(WebSocketDisconnect, msg=origen):
+                    with cliente.websocket_connect("/ws", headers={"origin": origen}):
+                        pass
+            with cliente.websocket_connect("/ws", headers={"origin": "http://localhost"}) as ws:
+                ws.send_json({"mensaje": "hola"})
+                self.assertEqual(recibir_hasta(ws, "respuesta")[-1]["contenido"], "eco: hola")
+
+    def test_el_origen_del_pedido_llega_al_agente(self):
+        with TestClient(app_mod.app, client=LOCAL, headers=HOST_LOCAL) as cliente:
+            with cliente.websocket_connect("/ws") as ws:
+                ws.send_json({"mensaje": "de donde"})
+                self.assertEqual(recibir_hasta(ws, "respuesta")[-1]["contenido"], "origen: local")
+        with TestClient(app_mod.app, headers={"authorization": f"Bearer {TOKEN}"}) as cliente:
+            with cliente.websocket_connect("/ws") as ws:
+                ws.send_json({"mensaje": "de donde"})
+                self.assertEqual(recibir_hasta(ws, "respuesta")[-1]["contenido"], "origen: remoto")
+
+    def test_solo_un_true_confirma(self):
+        with TestClient(app_mod.app, client=LOCAL, headers=HOST_LOCAL) as cliente:
+            with cliente.websocket_connect("/ws") as ws:
+                for valor in ("si", 1, "true"):
+                    ws.send_json({"mensaje": "haz un proyecto"})
+                    recibir_hasta(ws, "confirmacion")
+                    ws.send_json({"tipo": "confirmacion_respuesta", "confirmado": valor})
+                    self.assertEqual(recibir_hasta(ws, "respuesta")[-1]["contenido"], "confirmado: False")
+
+    def test_auditoria(self):
+        cliente = TestClient(app_mod.app, client=LOCAL, headers=HOST_LOCAL)
+        self.assertIn("eventos", cliente.get("/api/auditoria").json())
+        self.assertEqual(TestClient(app_mod.app).get("/api/auditoria").status_code, 401)
 
 
 from tests.test_director import BaseAgente  # noqa: E402 — Cain sin red ni disco
@@ -330,12 +411,12 @@ class TestAgenteAbreEnElDispositivo(BaseAgente):
     def test_modo_web_entrega_la_url_y_no_abre_el_pc(self):
         abiertos = []
         self.cain._abrir_fn = abiertos.append
-        self.cain._flujo_ejecutar_proyecto({"descripcion": "un cubo", "tipo": "web"})
+        self.cain._usar_herramienta("ejecutar_proyecto", {"descripcion": "un cubo", "tipo": "web"})
         self.assertEqual(abiertos, ["/proyectos/cubo_1/index.html"])
         self.assertFalse(self.ejecutar.call_args.kwargs["abrir_en_pc"])
 
     def test_sin_callback_abre_en_el_pc(self):
-        self.cain._flujo_ejecutar_proyecto({"descripcion": "un cubo", "tipo": "web"})
+        self.cain._usar_herramienta("ejecutar_proyecto", {"descripcion": "un cubo", "tipo": "web"})
         self.assertTrue(self.ejecutar.call_args.kwargs["abrir_en_pc"])
 
 

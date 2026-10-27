@@ -16,6 +16,9 @@ output.png
  
 # Proyectos generados por CAIN
 proyectos/
+
+# Espacio de trabajo de CAIN (sus archivos de texto, Fase 10)
+espacio/
  
 # Archivos de texto generados por CAIN
 *.txt

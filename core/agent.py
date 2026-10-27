@@ -1,7 +1,8 @@
 from llm.fabrica import crear_llms
 from llm.registro import RegistroUso
 
-from core import memory, tools, intent, prompts, executor, director, emocion
+from core import memory, tools, intent, prompts, executor, director, emocion, arnes
+from core.arnes import auditoria, reglas, revision_codigo, rutas
 from core.tool_schemas import TOOLS, PROMPT_ENRUTADOR
 import copy
 import os
@@ -45,25 +46,29 @@ class Cain:
         self._director_activo    = False
         self._hilo_director      = None
 
+        # Todas pasan por _usar_herramienta (el arnés): ninguna se llama directo.
+        # Las de nivel N2+ no actúan: devuelven una arnes.Accion a confirmar.
         self._herramientas = {
             "crear_archivo":     self._crear_archivo,
             "leer_archivo":      self._leer_archivo,
             "editar_archivo":    self._editar_archivo,
             "borrar_archivo":    self._borrar_archivo,
-            "ejecutar_proyecto": self._flujo_ejecutar_proyecto,
+            "ejecutar_proyecto": self._preparar_proyecto,
             "memoria_recordar":  self._memoria_recordar,
-            "memoria_olvidar":   self._memoria_olvidar,
+            "memoria_olvidar":   self._preparar_olvido,
             "memoria_consultar": self._memoria_consultar,
         }
 
     # ─── Punto de entrada ────────────────────────────────────────────────────
 
-    def chat(self, mensaje_usuario, canal="texto"):
+    def chat(self, mensaje_usuario, canal="texto", origen="local"):
         """
         Procesa un mensaje del usuario y retorna la respuesta de CAIN.
 
         canal: "texto" o "voz". Con "voz" la respuesta se pide corta y sin
         formato, porque se va a sintetizar.
+        origen: "local" (el propio PC) o "remoto" (otro dispositivo). El
+        arnés limita lo que se puede pedir desde fuera.
         """
 
         resultado = self.llms["enrutador"].chat_with_tools(
@@ -80,69 +85,158 @@ class Cain:
             nombre     = tool_call["name"]
             argumentos = tool_call["arguments"]
             print(f"[DEBUG] Herramienta invocada: {nombre}({argumentos})")
-            handler = self._herramientas.get(nombre)
-            if handler:
-                return handler(argumentos)
+            if nombre in self._herramientas:
+                return self._usar_herramienta(nombre, argumentos, canal, origen)
 
         return self._conversar(mensaje_usuario, canal)
 
-    # ─── Herramientas de archivo ─────────────────────────────────────────────
+    # ─── Arnés: la única puerta hacia las herramientas ───────────────────────
+
+    def _usar_herramienta(self, nombre, argumentos, canal="texto", origen="local"):
+        veredicto = arnes.evaluar(nombre, argumentos, origen)
+        registro  = {"argumentos": argumentos, "origen": origen, "canal": canal,
+                     "nivel": veredicto.nombre_nivel}
+        if not veredicto.permitido:
+            auditoria.registrar("denegado", nombre, motivo=veredicto.motivo, **registro)
+            return f"🛡️ No puedo hacer eso: {veredicto.motivo}."
+
+        try:
+            resultado = self._herramientas[nombre](argumentos)
+            if isinstance(resultado, arnes.Accion):
+                if veredicto.confirmar:
+                    plan = {**resultado.confirmacion, "nivel": veredicto.nombre_nivel}
+                    if not self._confirmar(plan):
+                        auditoria.registrar("cancelado", nombre, **registro)
+                        return resultado.al_cancelar
+                resultado = resultado.ejecutar()
+            elif veredicto.confirmar:
+                # Un handler N2+ que devuelve texto no puede haber actuado
+                # (falta un dato, el archivo no existe...): es una respuesta.
+                auditoria.registrar("sin_accion", nombre, **registro)
+                return resultado
+        except arnes.Denegado as e:
+            auditoria.registrar("denegado", nombre, motivo=str(e), **registro)
+            return f"🛡️ No puedo hacer eso: {e}."
+        except Exception as e:
+            auditoria.registrar("error", nombre, motivo=f"{type(e).__name__}: {e}", **registro)
+            raise
+
+        auditoria.registrar("ejecutado", nombre, **registro)
+        return resultado
+
+    def _confirmar(self, plan):
+        """
+        Pide confirmación a quien hizo la petición.
+        - Modo web: self._confirmar_fn, inyectado por app.py para ese turno.
+        - Modo terminal: input().
+        Solo un True explícito confirma.
+        """
+        confirmar_fn = getattr(self, "_confirmar_fn", None)
+        if confirmar_fn:
+            return confirmar_fn(plan) is True
+
+        print(f"\nCAIN: 🛡️ Necesito tu confirmación ({plan.get('nivel')}):")
+        if plan.get("clase") == "accion":
+            print(f"      {plan.get('titulo', '')}")
+            if plan.get("detalle"):
+                print(f"      {plan['detalle']}")
+        else:
+            for a in plan.get("archivos", []):
+                print(f"      📄 {a}")
+            print(f"      📟 {plan.get('comando', '')}")
+        for aviso in plan.get("advertencias", []):
+            print(f"      ⚠️ {aviso}")
+        respuesta = input("\n¿Procedo? (s/n): ").strip().lower()
+        return respuesta in ("s", "si", "sí", "yes", "y")
+
+    # ─── Herramientas de archivo (confinadas a espacio/) ─────────────────────
+
+    def _ruta_en_espacio(self, argumentos, escritura=False):
+        """Ruta resuelta del archivo pedido (o del último usado), o None si no hay nombre."""
+        nombre = argumentos.get("nombre_archivo") or self.ultimo_archivo
+        if not nombre:
+            return None
+        return rutas.resolver(tools.normalizar_nombre_txt(nombre), reglas.CARPETA_ESPACIO, escritura)
+
+    def _mostrar(self, ruta):
+        return rutas.para_mostrar(ruta, reglas.CARPETA_ESPACIO)
 
     def _crear_archivo(self, argumentos):
         nombre = argumentos.get("nombre_archivo") or tools.generar_nombre_timestamp()
-        nombre = tools.normalizar_nombre_txt(nombre)
-        nombre = tools.evitar_sobrescritura(nombre)
-        contenido = argumentos.get("contenido", "")
-        resultado = tools.crear_archivo(nombre, contenido)
-        self.ultimo_archivo = nombre
-        return f"🎭 He creado algo para este espectáculo...\n{resultado}"
+        ruta   = self._ruta_en_espacio({"nombre_archivo": nombre}, escritura=True)
+        ruta   = tools.evitar_sobrescritura(ruta)
+        ok, error = tools.crear_archivo(ruta, argumentos.get("contenido", ""))
+        if not ok:
+            return f"Error al crear archivo: {error}"
+        self.ultimo_archivo = ruta
+        return f"🎭 He creado algo para este espectáculo...\nArchivo '{self._mostrar(ruta)}' creado correctamente."
 
     def _leer_archivo(self, argumentos):
-        nombre = argumentos.get("nombre_archivo") or self.ultimo_archivo
-        if not nombre:
+        ruta = self._ruta_en_espacio(argumentos)
+        if not ruta:
             return "🎭 ¿Qué archivo quieres que lea?"
-        nombre = tools.normalizar_nombre_txt(nombre)
-        if not os.path.exists(nombre):
-            return f"🎭 No encontré el archivo '{nombre}'."
-        self.ultimo_archivo = nombre
-        return tools.leer_archivo(nombre)
+        if not os.path.isfile(ruta):
+            return f"🎭 No encontré el archivo '{self._mostrar(ruta)}'."
+        contenido, recortado = tools.leer_archivo(ruta)
+        self.ultimo_archivo = ruta
+        aviso = "\n\n(… el archivo sigue, solo muestro el principio)" if recortado else ""
+        return f"📖 Contenido de '{self._mostrar(ruta)}':\n\n{contenido}{aviso}"
 
     def _borrar_archivo(self, argumentos):
-        nombre = argumentos.get("nombre_archivo") or self.ultimo_archivo
-        if not nombre:
+        ruta = self._ruta_en_espacio(argumentos)
+        if not ruta:
             return "🎭 Necesito el nombre del archivo que deseas eliminar."
-        nombre = tools.normalizar_nombre_txt(nombre)
-        resultado = tools.borrar_archivo(nombre)
-        if nombre == self.ultimo_archivo:
-            self.ultimo_archivo = None
-        return resultado
+        if not os.path.isfile(ruta):
+            return f"🎭 El archivo '{self._mostrar(ruta)}' no existe."
+        visible = self._mostrar(ruta)
+
+        def ejecutar():
+            ok, error = tools.mover_a_papelera(ruta)
+            if not ok:
+                return f"Error al eliminar archivo: {error}"
+            if ruta == self.ultimo_archivo:
+                self.ultimo_archivo = None
+            return f"🗑️ Archivo '{visible}' enviado a la Papelera de reciclaje."
+
+        return arnes.Accion(ejecutar, {
+            "clase":        "accion",
+            "titulo":       f"Borrar '{visible}'",
+            "detalle":      f"Va a la Papelera de reciclaje ({os.path.getsize(ruta)} bytes); se puede recuperar.",
+            "advertencias": [],
+        })
 
     def _editar_archivo(self, argumentos):
-        nombre = argumentos.get("nombre_archivo") or self.ultimo_archivo
-        if not nombre:
+        ruta = self._ruta_en_espacio(argumentos, escritura=True)
+        if not ruta:
             return "🎭 ¿A qué archivo te refieres?"
-        nombre = tools.normalizar_nombre_txt(nombre)
-        if not os.path.exists(nombre):
-            return f"🎭 El archivo '{nombre}' no existe aún... ¿quieres que lo cree primero?"
+        if not os.path.isfile(ruta):
+            return f"🎭 El archivo '{self._mostrar(ruta)}' no existe aún... ¿quieres que lo cree primero?"
 
         instruccion = argumentos.get("instruccion", "")
-        if not intent.es_misma_intencion_archivo(nombre, instruccion, self.llms["intencion"]):
+        if not intent.es_misma_intencion_archivo(ruta, instruccion, self.llms["intencion"]):
             return "🎭 Esto no parece encajar con el archivo actual... puedo crear uno nuevo si quieres."
-        resultado = self._editar_archivo_inteligente(nombre, instruccion)
-        self.ultimo_archivo = nombre
+        resultado = self._editar_archivo_inteligente(ruta, instruccion)
+        self.ultimo_archivo = ruta
         return resultado
 
-    def _editar_archivo_inteligente(self, nombre, instruccion_usuario):
+    def _editar_archivo_inteligente(self, ruta, instruccion_usuario):
         try:
-            with open(nombre, "r", encoding="utf-8") as f:
-                contenido_actual = f.read()
+            contenido_actual, recortado = tools.leer_archivo(ruta)
         except Exception as e:
             return f"Error en edición: {str(e)}"
+        if recortado:
+            # Editar solo el principio y guardarlo cortaría el resto del archivo.
+            return "🎭 Ese archivo es demasiado grande para editarlo entero."
 
         nuevo_contenido = prompts.generar_edicion_archivo(
             self.llms["codigo"], contenido_actual, instruccion_usuario
         )
-        return tools.editar_archivo(nombre, nuevo_contenido)
+        copia = tools.respaldar(ruta, reglas.CARPETA_ESPACIO)
+        ok, error = tools.editar_archivo(ruta, nuevo_contenido)
+        if not ok:
+            return f"Error en edición: {error}"
+        return (f"✏️ Archivo '{self._mostrar(ruta)}' actualizado.\n"
+                f"(La versión anterior quedó en '{self._mostrar(copia)}'.)")
 
     # ─── Memoria explícita ───────────────────────────────────────────────────
 
@@ -156,6 +250,20 @@ class Cain:
         self.usuario_data = memory.agregar_nota(self.usuario_data, contenido)
         memory.guardar_usuario(self.usuario_data)
         return f"🧠 Anotado. Recordaré que {contenido}."
+
+    def _preparar_olvido(self, argumentos):
+        """'todo' e 'historial' no tienen vuelta atrás: se confirman (N3)."""
+        objetivo = argumentos.get("objetivo", "")
+        if objetivo not in ("todo", "historial"):
+            return self._memoria_olvidar(argumentos)
+        que = ("todo lo que sé de ti: perfil, notas, historial y memoria a largo plazo"
+               if objetivo == "todo" else "el historial de conversación y la memoria a largo plazo")
+        return arnes.Accion(lambda: self._memoria_olvidar(argumentos), {
+            "clase":        "accion",
+            "titulo":       "Borrar memoria" if objetivo == "todo" else "Borrar historial",
+            "detalle":      f"Se borra {que}. No se puede deshacer.",
+            "advertencias": [],
+        }, al_cancelar="🧠 Entendido, no olvido nada.")
 
     def _memoria_olvidar(self, argumentos):
         objetivo = argumentos.get("objetivo", "")
@@ -190,22 +298,26 @@ class Cain:
 
     # ─── Ejecución de proyectos ──────────────────────────────────────────────
 
-    def _flujo_ejecutar_proyecto(self, argumentos):
+    def _preparar_proyecto(self, argumentos):
         """
-        Flujo completo con confirmación.
-        - Modo terminal: usa input() clásico
-        - Modo web: usa self._confirmar_fn callback inyectado por app.py
+        Genera el plan (sin escribir nada) y lo devuelve como Accion: el
+        arnés lo confirma con quien lo pidió y solo entonces se ejecuta.
         """
         descripcion = argumentos.get("descripcion", "")
         tipo        = argumentos.get("tipo", "otro")
         print(f"[DEBUG] Tipo de proyecto: {tipo}")
 
         plan            = prompts.generar_plan_proyecto(self.llms["codigo"], descripcion, tipo)
-        nombre_proyecto = plan.get("nombre", "proyecto_cain")
+        nombre_proyecto = executor.nombre_seguro(plan.get("nombre", "proyecto_cain"))
         archivos        = plan.get("archivos", {})
 
-        if not archivos:
+        if not archivos or not isinstance(archivos, dict):
             return "🎭 No pude generar el proyecto. ¿Puedes darme más detalles?"
+
+        # Antes de confirmar: ningún archivo puede salirse de su carpeta y el
+        # código no puede nombrar rutas prohibidas (ambos lanzan Denegado).
+        executor.validar_archivos(archivos)
+        advertencias = revision_codigo.revisar_proyecto(archivos)
 
         # Modo web: el proyecto lo abre el dispositivo que lo pidió (vía
         # self._abrir_fn de app.py), no el navegador de esta máquina.
@@ -213,43 +325,34 @@ class Cain:
         lista_archivos = list(archivos.keys())
         comando        = executor.describir_comando(tipo, lista_archivos, abrir_en_pc=not abrir_fn)
 
-        # ── Confirmación: web o terminal ─────────────────────────────────────
-        if hasattr(self, "_confirmar_fn") and self._confirmar_fn:
-            # Modo web — enviar plan al frontend y esperar respuesta
-            confirmado = self._confirmar_fn({
-                "archivos": lista_archivos,
-                "comando":  comando,
-                "nombre":   nombre_proyecto,
-            })
-        else:
-            # Modo terminal — usar input() clásico
-            print(f"\nCAIN: 🎭 Plan de ejecución:")
-            for a in lista_archivos:
-                print(f"      📄 {a}")
-            print(f"      📟 {comando}")
-            respuesta = input("\n¿Procedo? (s/n): ").strip().lower()
-            confirmado = respuesta in ("s", "si", "sí", "yes", "y")
+        def ejecutar():
+            if getattr(self, "_estado_fn", None):
+                self._estado_fn("ejecutando")
 
-        if not confirmado:
-            return "🎭 Entendido, cancelado. Dime cuando quieras intentarlo de nuevo."
+            resultado, url, info_error = executor.ejecutar_proyecto(
+                nombre_proyecto, archivos, tipo, abrir_en_pc=not abrir_fn
+            )
 
-        if hasattr(self, "_estado_fn") and self._estado_fn:
-            self._estado_fn("ejecutando")
+            if info_error:
+                ruta_archivo, error = info_error
+                resultado = executor.corregir_y_reintentar(
+                    self.llms["codigo"], ruta_archivo, error, resultado, advertencias_confirmadas=advertencias
+                )
 
-        resultado, url, info_error = executor.ejecutar_proyecto(
-            nombre_proyecto, archivos, tipo, abrir_en_pc=not abrir_fn
-        )
+            if url and abrir_fn:
+                abrir_fn(url)
 
-        if info_error:
-            ruta_archivo, error = info_error
-            resultado = executor.corregir_y_reintentar(self.llms["codigo"], ruta_archivo, error, resultado)
+            if url:
+                return f"🎭 ¡El espectáculo está en vivo!\n\n{resultado}"
+            return f"🎭 ¡Listo!\n\n{resultado}"
 
-        if url and abrir_fn:
-            abrir_fn(url)
-
-        if url:
-            return f"🎭 ¡El espectáculo está en vivo!\n\n{resultado}"
-        return f"🎭 ¡Listo!\n\n{resultado}"
+        return arnes.Accion(ejecutar, {
+            "clase":        "proyecto",
+            "nombre":       nombre_proyecto,
+            "archivos":     lista_archivos,
+            "comando":      comando,
+            "advertencias": advertencias,
+        }, al_cancelar="🎭 Entendido, cancelado. Dime cuando quieras intentarlo de nuevo.")
 
     # ─── Conversación ────────────────────────────────────────────────────────
 

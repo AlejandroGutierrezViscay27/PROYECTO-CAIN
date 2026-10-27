@@ -16,3 +16,6 @@ piper-tts>=1.8.0
 
 # Fase 7 — TTS vía API HTTP genérica (TTS_PROVIDER=api)
 httpx>=0.27.0
+
+# Fase 10 - arnés: borrar = mandar a la Papelera, nunca os.remove
+send2trash>=1.8.0

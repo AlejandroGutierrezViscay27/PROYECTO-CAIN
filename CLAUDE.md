@@ -61,6 +61,11 @@ Variables de entorno en `.env` (ver `.env` para el listado completo):
   (`emocion.py`), detección de intención (`intent.py`), ejecución de
   proyectos generados (`executor.py`), herramientas (`tools.py`,
   `tool_schemas.py`) y prompts (`prompts.py`).
+- `core/arnes/` — arnés de seguridad (Fase 10, plan en `FASE10_PLAN.md`):
+  `evaluar()` decide por nivel (N0–N3) y origen; `reglas.py` (zonas, listas
+  blanca/negra, niveles — solo se cambian a mano); `rutas.resolver()` convierte
+  la ruta del LLM en una segura o lanza `Denegado`; `revision_codigo.py`
+  (AST del Python generado); `auditoria.py` → `data/auditoria.jsonl`.
 - `llm/` — interfaz `LLMProvider`, proveedores, fábrica por rol y registro
   de gasto.
 - `voice/` — interfaces `SpeechToText`/`TextToSpeech`, proveedores
@@ -78,7 +83,9 @@ Variables de entorno en `.env` (ver `.env` para el listado completo):
   en git. Archivos: `memoria.json` (historial), `memoria_usuario.json`
   (perfil), `memoria_larga.json` (director), `uso_llm.json` (gasto);
   `memoria_resumen.txt` es formato viejo, solo se lee para migrar.
-- `proyectos/` — proyectos generados y ejecutados por CAIN.
+- `proyectos/` — proyectos generados y ejecutados por CAIN. Se sirven en
+  `/p/<firma>/...` con CSP `sandbox` (su JS no puede usar la sesión de CAIN).
+- `espacio/` — único sitio donde las herramientas de archivo leen y escriben.
 - `tests/` — pruebas con `unittest`.
 - `graphify-out/` — grafo de arquitectura generado por Graphify
   (`GRAPH_REPORT.md`, `graph.json`) — útil para orientarse rápido en el
@@ -101,6 +108,13 @@ Variables de entorno en `.env` (ver `.env` para el listado completo):
 
 ## Convenciones
 
+- **Toda herramienta pasa por el arnés** (`Cain._usar_herramienta`): nivel en
+  `reglas.NIVEL_HERRAMIENTA` (si falta, se rechaza), rutas del LLM siempre con
+  `rutas.resolver()`, y si es N2+ el handler no actúa: devuelve
+  `arnes.Accion` para que se confirme. Nunca un `open`/`os.remove` con una
+  ruta que venga del LLM. Todo texto del LLM que pinte el frontend, con
+  `escapeHtml`.
+
 - Nombres de funciones, variables y docstrings en español; el código sigue
   el patrón interfaz abstracta (`base.py`) + implementaciones concretas para
   cada subsistema intercambiable (LLM, STT, TTS).
@@ -121,7 +135,10 @@ Variables de entorno en `.env` (ver `.env` para el listado completo):
 - `tests/__init__.py` redirige todas las rutas de `data/` (memoria y
   `registro.ARCHIVO_USO`) a una carpeta temporal: **ningún test puede tocar
   la memoria real del usuario**. Una ruta nueva en `data/` debe redirigirse
-  ahí también.
+  ahí también (ya lo están `auditoria.jsonl`, `espacio/` y `proyectos/`).
+- Casos de ataque del arnés en `tests/test_arnes.py`: todo poder nuevo trae
+  primero los suyos. Los `TestClient` "locales" necesitan
+  `headers={"host": "localhost"}` (si no, cuenta como DNS rebinding).
 - Para construir un `Cain` sin red: parchear `agent_mod.crear_llms` (ver
   `tests.mismo_llm_para_todos`) y `threading.Thread` con `HiloSincrono`
   (`tests/test_director.py`) para que el director corra en el momento.

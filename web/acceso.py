@@ -6,10 +6,12 @@ hace falta el token de CAIN_TOKEN: se pasa una vez como /?token=... y queda
 guardado en una cookie. Sin CAIN_TOKEN configurado solo entra localhost —
 CAIN ejecuta código y toca archivos, no puede quedar abierto a toda la red.
 """
+import hashlib
 import hmac
 import os
 import secrets
 import socket
+from urllib.parse import urlsplit
 
 COOKIE        = "cain_token"
 HOSTS_LOCALES = {"127.0.0.1", "::1", "localhost"}
@@ -48,9 +50,57 @@ def token_de(conexion):
     return ""
 
 
+def _nombre_de_host(cabecera):
+    """'localhost:8000' -> 'localhost', '[::1]:8000' -> '::1'."""
+    cabecera = cabecera.strip().lower()
+    if cabecera.startswith("["):
+        return cabecera[1:].split("]")[0]
+    return cabecera.rsplit(":", 1)[0] if cabecera.count(":") == 1 else cabecera
+
+
+def acceso_local(conexion):
+    """
+    La propia máquina, pidiendo por un nombre de loopback. Lo segundo cierra
+    el "DNS rebinding": una web cualquiera cuyo dominio resuelve a 127.0.0.1
+    llega desde localhost, pero su cabecera Host es la de ese dominio.
+    """
+    cliente = conexion.client.host if conexion.client else ""
+    return es_local(cliente) and es_local(_nombre_de_host(conexion.headers.get("host", "")))
+
+
 def autorizado(conexion):
-    host = conexion.client.host if conexion.client else ""
-    return es_local(host) or token_valido(token_de(conexion), token_configurado())
+    return acceso_local(conexion) or token_valido(token_de(conexion), token_configurado())
+
+
+def origen_permitido(conexion):
+    """
+    El navegador manda la cabecera Origin en todo WebSocket, y no aplica CORS:
+    sin este chequeo, cualquier página abierta en el PC podría conectarse a
+    ws://localhost:8000/ws y darle órdenes a CAIN. Solo vale el mismo origen.
+    Sin Origin no es un navegador (y entonces no lo maneja ninguna web).
+    """
+    origen = conexion.headers.get("origin")
+    if origen is None:
+        return True
+    host = conexion.headers.get("host", "").strip().lower()
+    return bool(host) and urlsplit(origen.strip().lower()).netloc == host
+
+
+# ─── Proyectos web ───────────────────────────────────────────────────────────
+# Se sirven con CSP "sandbox" (origen opaco): su JavaScript no puede usar la
+# cookie de CAIN ni abrir su WebSocket. Como sin cookie el móvil no podría
+# cargar ni el CSS del proyecto, la URL lleva una firma que hace de permiso
+# de solo lectura para ESE proyecto. La clave cambia en cada arranque.
+
+_CLAVE_PROYECTOS = secrets.token_bytes(32)
+
+
+def firma_proyecto(nombre):
+    return hmac.new(_CLAVE_PROYECTOS, nombre.encode("utf-8"), hashlib.sha256).hexdigest()[:32]
+
+
+def firma_valida(nombre, firma):
+    return hmac.compare_digest(firma_proyecto(nombre).encode(), firma.encode("utf-8", "replace"))
 
 
 def ip_local():

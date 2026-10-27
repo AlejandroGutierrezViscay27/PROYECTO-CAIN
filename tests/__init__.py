@@ -15,6 +15,14 @@ from llm import registro
 
 registro.ARCHIVO_USO = os.path.join(_DATA_PRUEBAS, "uso_llm.json")
 
+# Fase 10: la auditoría y las zonas de trabajo de CAIN (espacio/ y proyectos/)
+# tampoco pueden ser las reales.
+from core.arnes import auditoria, reglas
+
+auditoria.ARCHIVO_AUDITORIA = os.path.join(_DATA_PRUEBAS, "auditoria.jsonl")
+reglas.CARPETA_ESPACIO      = os.path.join(_DATA_PRUEBAS, "espacio")
+reglas.CARPETA_PROYECTOS    = os.path.join(_DATA_PRUEBAS, "proyectos")
+
 
 def mismo_llm_para_todos(clase):
     """Sustituto de crear_llms(): una sola instancia de prueba para todos los roles."""

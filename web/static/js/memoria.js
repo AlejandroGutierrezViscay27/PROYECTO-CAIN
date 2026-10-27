@@ -41,13 +41,13 @@ function actualizarMemoriaPanel(data) {
 
   if (data.intereses && data.intereses.length > 0) {
     intereses.innerHTML = data.intereses
-      .map(i => `<span class="memory-tag">${i}</span>`)
+      .map(i => `<span class="memory-tag">${escapeHtml(i)}</span>`)
       .join("");
   }
 
   if (data.notas && data.notas.length > 0) {
     notas.innerHTML = data.notas
-      .map(n => `<div class="memory-note">${n}</div>`)
+      .map(n => `<div class="memory-note">${escapeHtml(n)}</div>`)
       .join("");
   }
 
