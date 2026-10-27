@@ -25,6 +25,10 @@ NIVEL_HERRAMIENTA = {
     "memoria_consultar": N0,
     "sistema_ventanas":  N0,   # Fase 10.1: el resultado va al usuario, nunca al LLM
     "sistema_info":      N0,
+    "sistema_abrir_app": N1,   # Fase 10.2: solo apps de APPS_PERMITIDAS
+    "sistema_abrir_url": N1,   # solo http(s), en el navegador de CAIN
+    "sistema_multimedia": N1,  # play/pausa, siguiente, anterior
+    "sistema_volumen":   N1,
     "crear_archivo":     N1,   # nunca sobrescribe
     "editar_archivo":    N1,   # guarda la versión anterior en .respaldos/
     "memoria_recordar":  N1,
@@ -130,6 +134,58 @@ EXTENSIONES_ESCRITURA = frozenset({
 LARGO_MAX_RUTA = 240
 
 
+# ─── Apps y URLs (Fase 10.2) ─────────────────────────────────────────────────
+
+# Perfil propio del navegador de CAIN: no ve tus contraseñas, tu historial ni
+# tus sesiones. Fuera del repo porque el repo está en OneDrive (las cookies se
+# subirían a la nube), y en AppData, que las herramientas de archivo no tocan.
+CARPETA_NAVEGADOR = os.path.join(
+    os.environ.get("LOCALAPPDATA") or os.path.join(os.path.expanduser("~"), "AppData", "Local"),
+    "CAIN", "navegador")
+
+
+def apps_permitidas():
+    """
+    Apps que CAIN puede abrir: nombre → rutas exactas candidatas (se usa la
+    primera que exista). Por ruta y no por nombre: un "brave.exe" en Descargas
+    no es Brave. Nunca con argumentos del LLM. La lista se amplía aquí, a mano.
+    """
+    archivos = _entorno("ProgramFiles", r"C:\Program Files")
+    archivos_x86 = _entorno("ProgramFiles(x86)", r"C:\Program Files (x86)")
+    local = _entorno("LOCALAPPDATA", os.path.join(os.path.expanduser("~"), "AppData", "Local"))
+    roaming = _entorno("APPDATA", os.path.join(os.path.expanduser("~"), "AppData", "Roaming"))
+    return {
+        # El navegador de CAIN: Brave (el tuyo) y, si no está, Edge. Siempre
+        # con el perfil de CARPETA_NAVEGADOR (ver argumentos_app).
+        "navegador": [
+            os.path.join(archivos, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+            os.path.join(local, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+            os.path.join(archivos_x86, "Microsoft", "Edge", "Application", "msedge.exe"),
+            os.path.join(archivos, "Microsoft", "Edge", "Application", "msedge.exe"),
+        ],
+        "spotify": [
+            os.path.join(roaming, "Spotify", "Spotify.exe"),
+            os.path.join(local, "Microsoft", "WindowsApps", "Spotify.exe"),   # Microsoft Store
+        ],
+    }
+
+
+def argumentos_app(nombre):
+    """Argumentos fijos con que se abre cada app. El LLM no añade ninguno."""
+    if nombre == "navegador":
+        return [f"--user-data-dir={CARPETA_NAVEGADOR}", "--no-first-run", "--no-default-browser-check"]
+    return []
+
+
+ESQUEMAS_URL = frozenset({"http", "https"})
+LARGO_MAX_URL = 2000
+
+# Nombres de la red local: el navegador de CAIN no entra en el router, en
+# otros equipos de casa ni en el propio CAIN.
+SUFIJOS_LOCALES = (".localhost", ".local", ".lan", ".home", ".internal", ".intranet",
+                   ".corp", ".home.arpa")
+
+
 # ─── Límites ─────────────────────────────────────────────────────────────────
 
 # Lo máximo que se lee de un archivo para mostrarlo o mandarlo al LLM.
@@ -144,4 +200,12 @@ ENTORNO_PERMITIDO = frozenset({
     "PROGRAMW6432", "COMMONPROGRAMFILES", "COMMONPROGRAMFILES(X86)",
     "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE", "OS", "LANG",
     "VIRTUAL_ENV",
+})
+
+# Las que heredan las apps que abre CAIN (Fase 10.2): las del sistema, nunca
+# las del .env.
+ENTORNO_APPS = (ENTORNO_PERMITIDO - {"VIRTUAL_ENV"}) | frozenset({
+    "ALLUSERSPROFILE", "PUBLIC", "COMPUTERNAME", "USERDOMAIN", "SESSIONNAME",
+    "LOGONSERVER", "PROCESSOR_IDENTIFIER", "PROCESSOR_LEVEL", "PROCESSOR_REVISION",
+    "COMMONPROGRAMW6432", "USERDOMAIN_ROAMINGPROFILE", "DRIVERDATA",
 })

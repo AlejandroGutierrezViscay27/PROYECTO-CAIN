@@ -1,7 +1,7 @@
 # Fase 10 — Control del sistema operativo: plan y arnés de seguridad
 
-> Estado: **10.0 implementada** (arnés + cierre de huecos, 137 pruebas en
-> verde). Decisiones de la primera ronda tomadas (§11). WhatsApp y el
+> Estado: **10.0, 10.1 y 10.2 implementadas** (arnés, observar el sistema,
+> abrir apps y URLs, multimedia y volumen; 178 pruebas en verde). Decisiones de la primera ronda tomadas (§11). WhatsApp y el
 > teclado/ratón genéricos están en **10.P — Pendientes de diseño** (§12).
 
 ## 0. Principio rector
@@ -200,7 +200,7 @@ so/
   base.py            ControlSO (ABC): abrir_app(), abrir_url(), ventanas()...
   windows.py         implementación real
   simulado.py        no toca nada (tests y modo ensayo)
-  navegador.py       Playwright sobre Edge, con un perfil propio de CAIN
+  navegador.py       Playwright sobre Brave (o Edge), con un perfil propio de CAIN
   conectores/
     youtube.py       buscar, reproducir, recomendados, pausar
     spotify.py       buscar, reproducir, listas, sugerir
@@ -211,12 +211,15 @@ so/
 
 - Navegador Chromium controlado con **Playwright** (usa uno instalado, sin
   descargar navegadores) con un **perfil aparte**, no el tuyo. **Tu navegador
-  es Brave** (lo vio la 10.1): CAIN puede usar Brave o Edge, siempre con un
-  perfil propio. Se decide al empezar la 10.3. CAIN no ve tus
-  contraseñas guardadas, tu historial ni las pestañas de tu banco.
-- El perfil vive en `data/navegador/`, que no está en git y que las
-  herramientas de archivo no pueden tocar, porque guarda la sesión de
-  WhatsApp, que equivale a acceso a la cuenta.
+  es Brave** (lo vio la 10.1). Desde la 10.2, CAIN usa **Brave** (y Edge si
+  Brave no está), siempre con un perfil propio; se puede cambiar en
+  `reglas.apps_permitidas()`. CAIN no ve tus contraseñas guardadas, tu
+  historial ni las pestañas de tu banco.
+- El perfil vive en **`%LOCALAPPDATA%\CAIN\navegador`** (no en
+  `data/navegador/` como decía el plan: el repo está en OneDrive y las
+  cookies se subirían a la nube). Las herramientas de archivo no pueden
+  tocarlo (AppData es zona protegida), porque guardará sesiones iniciadas,
+  como la de WhatsApp, que equivale a acceso a la cuenta.
 - **Lista blanca de dominios por conector**: `youtube.com`,
   `web.whatsapp.com`, `open.spotify.com`. Cualquier navegación fuera de esa
   lista se aborta.
@@ -358,10 +361,10 @@ revalidando la ventana antes de cada pulsación y con freno de emergencia
 - **Apps**: solo las de una lista blanca, por **ruta exacta del ejecutable**
   (no por nombre: un `chrome.exe` en Descargas no es Chrome) y sin
   argumentos que diga el LLM. **Lista inicial (decidida)**: el navegador de
-  CAIN (Edge) y la app de escritorio de Spotify. Se detecta dónde está
-  instalada (`%APPDATA%\Spotify\Spotify.exe` o la versión de Microsoft
-  Store) y la lista se amplía editando `reglas.py`, a medida que se te
-  ocurran más.
+  CAIN (Brave, o Edge si no está) y la app de escritorio de Spotify (la
+  tuya es la de Microsoft Store: `%LOCALAPPDATA%\Microsoft\WindowsApps\Spotify.exe`).
+  La lista se amplía editando `reglas.apps_permitidas()`, a medida que se
+  te ocurran más.
 - **Pestañas del navegador de CAIN**: abrir una pestaña con una URL
   http(s), listar pestañas, cambiar a una y cerrarla (N1; solo las pestañas
   de CAIN, nunca las de tu navegador normal). Navegar a cualquier web sí;
@@ -408,7 +411,7 @@ pero tarda en arrancar.
 |-------|-----------|-----------|--------|
 | ~~10.0~~ | ~~Arnés, auditoría, H1–H14~~ | — | ✅ hecho |
 | ~~10.1~~ | ~~Observar: ventanas abiertas, app activa, info del sistema~~ | N0 | ✅ hecho (§13) |
-| 10.2 | Abrir apps de la lista blanca (navegador, Spotify) y URLs http(s); volumen y multimedia | N1 | listo |
+| ~~10.2~~ | ~~Abrir apps de la lista blanca (navegador, Spotify) y URLs http(s); volumen y multimedia~~ | N1 | ✅ hecho (§14) |
 | 10.3 | Navegador de CAIN (Playwright + perfil propio) con pestañas + **YouTube** | N1 | listo |
 | 10.4 | **Spotify** por API oficial | N1 | listo (te guío con la app de developer.spotify.com) |
 | 10.5 | **Análisis de documentos**: Excel y CSV primero; después PDF y Word | N0 | listo |
@@ -517,3 +520,45 @@ rechaza porque no tiene nivel declarado en `reglas.py`.
   "¿qué tengo abierto?" y "¿en qué programa estoy?" → `sistema_ventanas`;
   "¿qué hora es?", "¿cuánta RAM uso?" y "¿cuánto disco me queda?" →
   `sistema_info`; "cuéntame un chiste" → conversación.
+
+---
+
+## 14. Fase 10.2 — hecho
+
+- **Herramientas** (N1, se pueden pedir desde el móvil):
+  `sistema_abrir_app` (`navegador` o `spotify`, opciones cerradas),
+  `sistema_abrir_url`, `sistema_multimedia` (play/pausa, siguiente,
+  anterior) y `sistema_volumen` (subir, bajar, fijar, silenciar, activar el
+  sonido). `sistema_info` muestra además el volumen.
+- **`core/arnes/sistema.py`**: lo que propone el LLM se valida aquí, y
+  `so/` lo vuelve a validar antes de actuar (dos barreras).
+  - Apps: lista blanca por **ruta exacta** (`reglas.apps_permitidas()`),
+    con **argumentos fijos** (`reglas.argumentos_app()`). El LLM no añade
+    ninguno.
+  - URLs: solo `http`/`https`; sin espacios, comillas, controles ni barras
+    invertidas, para que no pueda colar flags en la línea de comandos del
+    navegador. Sin `usuario@` y **sin red local**: ni `localhost` (el
+    propio CAIN), ni IPs privadas, de loopback o de enlace local, ni formas
+    raras de escribirlas (`2130706433`, `0x7f.1`), ni `.local`/`.lan`.
+  - Volumen: un entero de 0 a 100; multimedia: tres acciones fijas.
+- **`so/windows.py`**: lanza con `subprocess.Popen` en forma de lista, sin
+  shell ni consola, con un entorno sin secretos (`reglas.ENTORNO_APPS`: sin
+  `OPENAI_API_KEY` ni `CAIN_TOKEN`). Las teclas multimedia van por
+  `keybd_event` (solo esas tres, no hay teclado genérico). El volumen va por
+  Core Audio (`IAudioEndpointVolume`) con ctypes, sin dependencias nuevas.
+- **Navegador de CAIN**: Brave con su propio perfil en
+  `%LOCALAPPDATA%\CAIN\navegador`, creado la primera vez con preferencias
+  prudentes: pregunta antes de descargar y bloquea cámara, micrófono,
+  ubicación y notificaciones. Probado de verdad: abre "YouTube - Brave" en
+  una ventana aparte, sin tocar tu Brave.
+- **Pruebas**: 26 nuevas (178 en total), casi todas de ataque (URLs, apps
+  fuera de la lista, argumentos inyectados, secretos en el entorno). Con
+  `Popen` parcheado se comprueba el comando exacto que se lanzaría.
+- **Enrutador real**: 21 de 21 frases bien elegidas ("abre youtube" →
+  URL, "pon la siguiente canción" → siguiente, "pon el volumen al 30" →
+  fijar 30, "abre el cmd" → conversación). Hubo que afinar las
+  descripciones: al principio "abre youtube" abría el navegador vacío y
+  "siguiente canción" hacía play/pausa.
+- **Límite conocido**: play/pausa es una sola tecla (alterna), así que
+  "pausa" con nada sonando reanuda. Se resuelve con Spotify por API (10.4),
+  que sabe qué está sonando.

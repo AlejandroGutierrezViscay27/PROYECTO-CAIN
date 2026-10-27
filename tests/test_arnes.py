@@ -13,7 +13,7 @@ import unittest
 from unittest import mock
 
 from core import arnes, executor, tools
-from core.arnes import auditoria, reglas, revision_codigo, rutas
+from core.arnes import auditoria, reglas, revision_codigo, rutas, sistema
 from core.arnes.rutas import Denegado
 from core.tool_schemas import TOOLS, TOOLS_SO
 from tests.test_director import BaseAgente
@@ -402,6 +402,123 @@ class TestEjecucion(unittest.TestCase):
             executor.corregir_y_reintentar(None, ruta, "error", "original",
                                            advertencias_confirmadas=["main.py: lanza otros programas"])
         ejecutar.assert_called_once()
+
+
+# ─── Fase 10.2: apps, URLs, multimedia y volumen ─────────────────────────────
+
+class TestUrls(unittest.TestCase):
+
+    def denegada(self, url):
+        with self.assertRaises(Denegado, msg=url):
+            sistema.validar_url(url)
+
+    def test_urls_normales(self):
+        for url in ("https://www.youtube.com/results?search_query=lofi+hip+hop",
+                    "https://youtube.com/watch?v=abc123&t=10",
+                    "HTTPS://WWW.YOUTUBE.COM", "https://www.google.com/search?q=caf%C3%A9",
+                    "https://xn--caf-dma.com/", "https://youtube.com./", "http://8.8.8.8/"):
+            self.assertEqual(sistema.validar_url(url), url)
+
+    def test_solo_http_y_https(self):
+        for url in ("file:///C:/Windows/System32/cmd.exe", "javascript:alert(1)",
+                    "data:text/html,<script>x</script>", "ms-settings:privacy", "search-ms:query=x",
+                    "ftp://ftp.ejemplo.com", "youtube.com", "//youtube.com", "https://", "",
+                    None, 42, ["https://youtube.com"]):
+            self.denegada(url)
+
+    def test_nada_que_rompa_la_linea_de_comandos(self):
+        # La URL va como argumento del navegador: no puede colar flags ni partirse.
+        for url in ("--user-data-dir=C:\\", "https://a.com --disable-web-security",
+                    'https://a.com" --flag="x', "https://a.com\n--flag", "https://a.com\t--flag",
+                    "https://a.com\\..\\x", "https://a.com/\x00", "https://a.com/" + "x" * 3000):
+            self.denegada(url)
+
+    def test_ni_la_red_local_ni_el_propio_cain(self):
+        for url in ("http://localhost:8000/api/auditoria", "http://127.0.0.1:8000/",
+                    "http://2130706433/", "http://0x7f.1/", "http://0177.0.0.1/",
+                    "http://[::1]:8000/", "http://[fe80::1]/", "http://192.168.1.1/",
+                    "http://10.0.0.1/", "http://172.16.0.1/", "http://169.254.169.254/latest/",
+                    "http://router.local/", "http://cain.localhost/", "http://nas.lan/",
+                    "http://intranet/", "http://0.0.0.0/"):
+            self.denegada(url)
+
+    def test_usuario_arroba_esconde_el_sitio_real(self):
+        self.denegada("https://www.youtube.com@sitio-malo.com/")
+        self.denegada("https://usuario:clave@youtube.com/")
+
+    def test_puerto_invalido(self):
+        self.denegada("https://youtube.com:99999/")
+
+
+class TestApps(unittest.TestCase):
+
+    def setUp(self):
+        self.carpeta = tempfile.mkdtemp(prefix="cain_apps_")
+        self.addCleanup(shutil.rmtree, self.carpeta, ignore_errors=True)
+        self.brave   = os.path.join(self.carpeta, "Brave", "brave.exe")
+        self.edge    = os.path.join(self.carpeta, "Edge", "msedge.exe")
+        self.spotify = os.path.join(self.carpeta, "Spotify", "Spotify.exe")
+        for ruta in (self.edge, self.spotify):
+            os.makedirs(os.path.dirname(ruta))
+            open(ruta, "w").close()
+        apps = {"navegador": [self.brave, self.edge], "spotify": [self.spotify]}
+        parche = mock.patch.object(reglas, "apps_permitidas", lambda: apps)
+        parche.start()
+        self.addCleanup(parche.stop)
+
+    def test_usa_la_primera_que_existe(self):
+        ruta, argumentos = sistema.resolver_app("navegador")
+        self.assertEqual(ruta, self.edge)   # Brave no está "instalado" aquí
+        self.assertIn(f"--user-data-dir={reglas.CARPETA_NAVEGADOR}", argumentos)
+        self.assertEqual(sistema.resolver_app(" Spotify "), (self.spotify, []))
+
+    def test_solo_apps_de_la_lista(self):
+        for nombre in ("cmd", "powershell", "regedit", "../spotify", self.spotify, "", None, 3):
+            with self.assertRaises(Denegado, msg=nombre):
+                sistema.resolver_app(nombre)
+
+    def test_por_ruta_exacta_no_por_nombre(self):
+        self.assertTrue(sistema.es_ejecutable_permitido(self.edge))
+        self.assertTrue(sistema.es_ejecutable_permitido(self.edge.upper()))
+        falso = os.path.join(PERFIL, "Downloads", "msedge.exe")
+        self.assertFalse(sistema.es_ejecutable_permitido(falso))
+        self.assertFalse(sistema.es_ejecutable_permitido(os.path.join(SYSTEM32, "cmd.exe")))
+        self.assertFalse(sistema.es_ejecutable_permitido(None))
+
+    def test_el_perfil_del_navegador_esta_protegido_y_fuera_de_onedrive(self):
+        with self.assertRaises(Denegado):
+            rutas.verificar(os.path.join(reglas.CARPETA_NAVEGADOR, "Default", "Cookies"))
+        self.assertFalse(rutas.dentro_de(reglas.CARPETA_NAVEGADOR, reglas.RAIZ_CAIN))
+
+    def test_las_apps_no_heredan_secretos(self):
+        self.assertNotIn("OPENAI_API_KEY", reglas.ENTORNO_APPS)
+        self.assertNotIn("CAIN_TOKEN", reglas.ENTORNO_APPS)
+        self.assertFalse({n for n in reglas.ENTORNO_APPS if "KEY" in n or "TOKEN" in n})
+
+
+class TestMultimediaYVolumen(unittest.TestCase):
+
+    def test_multimedia(self):
+        self.assertEqual(sistema.validar_multimedia("siguiente"), "siguiente")
+        for accion in ("apagar", "cerrar", "", None):
+            with self.assertRaises(Denegado):
+                sistema.validar_multimedia(accion)
+
+    def test_volumen(self):
+        self.assertEqual(sistema.validar_volumen("subir", None), ("subir", 10))
+        self.assertEqual(sistema.validar_volumen("fijar", 30.4), ("fijar", 30))
+        self.assertEqual(sistema.validar_volumen("silenciar", 99), ("silenciar", None))
+        for accion, valor in (("fijar", 150), ("fijar", -1), ("fijar", None), ("fijar", "30"),
+                              ("fijar", True), ("explotar", 10), (None, 10)):
+            with self.assertRaises(Denegado, msg=(accion, valor)):
+                sistema.validar_volumen(accion, valor)
+
+    def test_niveles(self):
+        for herramienta in ("sistema_abrir_app", "sistema_abrir_url",
+                            "sistema_multimedia", "sistema_volumen"):
+            self.assertEqual(reglas.NIVEL_HERRAMIENTA[herramienta], reglas.N1)
+            # Decisión del usuario: poner música o un vídeo desde el móvil, sí.
+            self.assertTrue(arnes.evaluar(herramienta, {}, "remoto").permitido)
 
 
 if __name__ == "__main__":

@@ -68,8 +68,12 @@ Variables de entorno en `.env` (ver `.env` para el listado completo):
   blanca/negra, niveles — solo se cambian a mano); `rutas.resolver()` convierte
   la ruta del LLM en una segura o lanza `Denegado`; `revision_codigo.py`
   (AST del Python generado); `auditoria.py` → `data/auditoria.jsonl`.
+  `sistema.py`: lista blanca de apps (ruta exacta + argumentos fijos) y
+  validación de URLs (solo http(s), sin red local), multimedia y volumen.
 - `so/` — control del sistema operativo (Fase 10): `ControlSO` en `base.py`
-  (10.1: solo lectura), `windows.py` (ctypes), `simulado.py`; fábrica
+  (10.1: lectura; 10.2: abrir apps y URLs, multimedia, volumen — cada método
+  que actúa revalida con `core.arnes.sistema`), `windows.py` (ctypes, Core
+  Audio), `simulado.py`; fábrica
   `crear_control_so()` según `CAIN_SO`. Las herramientas de sistema
   (`TOOLS_SO`) solo se ofrecen al LLM si hay uno activo.
 - `llm/` — interfaz `LLMProvider`, proveedores, fábrica por rol y registro
@@ -92,6 +96,8 @@ Variables de entorno en `.env` (ver `.env` para el listado completo):
 - `proyectos/` — proyectos generados y ejecutados por CAIN. Se sirven en
   `/p/<firma>/...` con CSP `sandbox` (su JS no puede usar la sesión de CAIN).
 - `espacio/` — único sitio donde las herramientas de archivo leen y escriben.
+- Perfil del navegador de CAIN: `%LOCALAPPDATA%\CAIN\navegador`, fuera del
+  repo (el repo está en OneDrive; las cookies no deben sincronizarse).
 - `tests/` — pruebas con `unittest`.
 - `graphify-out/` — grafo de arquitectura generado por Graphify
   (`GRAPH_REPORT.md`, `graph.json`) — útil para orientarse rápido en el

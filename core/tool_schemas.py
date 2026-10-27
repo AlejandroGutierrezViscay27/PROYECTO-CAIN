@@ -24,6 +24,10 @@ Analiza el mensaje del usuario y decide:
 - Si pregunta qué tiene abierto en el PC, qué programa está usando, o por
   el estado del equipo (hora, batería, memoria, disco, cuánto lleva
   encendido) y esas herramientas están disponibles → invócalas.
+- Si pide abrir el navegador, Spotify o una página web (YouTube, buscar un
+  vídeo), controlar lo que suena ("pausa", "pon la siguiente canción",
+  "la anterior") o cambiar el volumen, y esas herramientas están
+  disponibles → invócalas.
 - Si es conversación normal, una pregunta general, o pide un EJEMPLO
   o EXPLICACIÓN de cómo hacer algo (sin pedir que tú lo hagas ahora)
   → NO invoques ninguna herramienta.
@@ -185,7 +189,7 @@ TOOLS = [
     },
 ]
 
-# Fase 10.1 — observar el sistema (N0). Solo se le ofrecen al LLM si hay un
+# Fase 10.1–10.2 — el sistema operativo. Solo se le ofrecen al LLM si hay un
 # ControlSO activo (CAIN_SO en el .env); si no, ni sabe que existen.
 TOOLS_SO = [
     {
@@ -200,8 +204,82 @@ TOOLS_SO = [
         "type": "function",
         "function": {
             "name": "sistema_info",
-            "description": "Estado del PC del usuario: fecha y hora, batería, memoria RAM, espacio en disco y tiempo encendido.",
+            "description": "Estado del PC del usuario: fecha y hora, batería, memoria RAM, espacio en disco, volumen y tiempo encendido.",
             "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    # Fase 10.2 — actuar (N1): opciones cerradas o una URL que valida el arnés.
+    {
+        "type": "function",
+        "function": {
+            "name": "sistema_abrir_app",
+            "description": (
+                "Abre una aplicación en el PC del usuario: el navegador (vacío) o Spotify. "
+                "Si nombra una web (YouTube, Google, una página), usa sistema_abrir_url."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "app": {"type": "string", "enum": ["navegador", "spotify"]},
+                },
+                "required": ["app"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "sistema_abrir_url",
+            "description": (
+                "Abre una página web en el navegador del PC. Úsala para 'abre YouTube' "
+                "(https://www.youtube.com), "
+                "'busca X en YouTube' (https://www.youtube.com/results?search_query=X), "
+                "'abre la web de...'. Solo direcciones http o https completas."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "URL completa, con https://"},
+                },
+                "required": ["url"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "sistema_multimedia",
+            "description": "Controla lo que esté sonando en el PC (Spotify, un vídeo...): pausar o reanudar, siguiente, anterior.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "accion": {
+                        "type": "string",
+                        "enum": ["reproducir_pausar", "siguiente", "anterior"],
+                        "description": (
+                            "reproducir_pausar = pausar, parar o reanudar; "
+                            "siguiente = pasar o saltar a la siguiente canción o vídeo; "
+                            "anterior = volver a la canción o vídeo anterior."
+                        ),
+                    },
+                },
+                "required": ["accion"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "sistema_volumen",
+            "description": "Cambia el volumen general del PC: subir o bajar (valor = cuántos puntos, 10 si no dice), fijar (valor = porcentaje), silenciar o activar el sonido.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "accion": {"type": "string", "enum": ["subir", "bajar", "fijar", "silenciar", "activar_sonido"]},
+                    "valor":  {"type": "integer", "minimum": 0, "maximum": 100},
+                },
+                "required": ["accion"],
+            },
         },
     },
 ]

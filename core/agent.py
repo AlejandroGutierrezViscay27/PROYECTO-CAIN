@@ -2,7 +2,7 @@ from llm.fabrica import crear_llms
 from llm.registro import RegistroUso
 
 from core import memory, tools, intent, prompts, executor, director, emocion, arnes
-from core.arnes import auditoria, reglas, revision_codigo, rutas
+from core.arnes import auditoria, reglas, revision_codigo, rutas, sistema
 from core.tool_schemas import TOOLS, TOOLS_SO, PROMPT_ENRUTADOR
 from so import crear_control_so
 import time
@@ -66,8 +66,12 @@ class Cain:
         }
         if self.so:
             self._herramientas.update({
-                "sistema_ventanas": self._sistema_ventanas,
-                "sistema_info":     self._sistema_info,
+                "sistema_ventanas":   self._sistema_ventanas,
+                "sistema_info":       self._sistema_info,
+                "sistema_abrir_app":  self._sistema_abrir_app,
+                "sistema_abrir_url":  self._sistema_abrir_url,
+                "sistema_multimedia": self._sistema_multimedia,
+                "sistema_volumen":    self._sistema_volumen,
             })
 
     # ─── Punto de entrada ────────────────────────────────────────────────────
@@ -288,9 +292,64 @@ class Cain:
             lineas.append(f"💾 Disco: {_gb(info['disco_libre'])} libres de {_gb(info['disco_total'])}")
         if info.get("encendido_seg") is not None:
             lineas.append(f"⏱️ Encendido hace {_duracion(info['encendido_seg'])}")
+        try:
+            volumen, silenciado = self.so.volumen()
+            lineas.append("🔇 Sonido silenciado" if silenciado else f"🔊 Volumen: {volumen} %")
+        except Exception:
+            pass   # sin dispositivo de audio, por ejemplo
         if info.get("sistema"):
             lineas.append(f"💻 {info['sistema']}")
         return "\n".join(lineas)
+
+    # ─── Actuar en el sistema (Fase 10.2, N1) ────────────────────────────────
+    # El LLM elige entre opciones cerradas (app de la lista blanca, acción
+    # multimedia) o da una URL; core.arnes.sistema lo valida aquí y so/ lo
+    # vuelve a validar antes de actuar.
+
+    NOMBRE_APP   = {"navegador": "el navegador de CAIN", "spotify": "Spotify"}
+    LARGO_MAX_URL_MOSTRADA = 120
+    MENSAJE_MULTIMEDIA = {
+        "reproducir_pausar": "⏯️ Listo: play/pausa.",
+        "siguiente":         "⏭️ Siguiente.",
+        "anterior":          "⏮️ Anterior.",
+    }
+
+    def _sistema_abrir_app(self, argumentos):
+        nombre = argumentos.get("app")
+        ruta, argumentos_app = sistema.resolver_app(nombre)
+        self.so.abrir_app(ruta, argumentos_app)
+        nombre = nombre.strip().lower()
+        return f"🚀 Abrí {self.NOMBRE_APP.get(nombre, nombre)}."
+
+    def _sistema_abrir_url(self, argumentos):
+        url = sistema.validar_url(argumentos.get("url"))
+        self.so.abrir_url(url)
+        if len(url) > self.LARGO_MAX_URL_MOSTRADA:
+            url = url[:self.LARGO_MAX_URL_MOSTRADA] + "…"
+        return f"🌐 Abrí {url} en el navegador de CAIN."
+
+    def _sistema_multimedia(self, argumentos):
+        accion = sistema.validar_multimedia(argumentos.get("accion"))
+        self.so.multimedia(accion)
+        return self.MENSAJE_MULTIMEDIA[accion]
+
+    def _sistema_volumen(self, argumentos):
+        accion, valor = sistema.validar_volumen(argumentos.get("accion"), argumentos.get("valor"))
+        if accion == "silenciar":
+            self.so.silenciar(True)
+            return "🔇 Silenciado."
+        actual, _ = self.so.volumen()
+        if accion == "activar_sonido":
+            self.so.silenciar(False)
+            return f"🔊 Sonido activado ({actual} %)."
+        if accion == "subir":
+            nuevo = min(100, actual + valor)
+        elif accion == "bajar":
+            nuevo = max(0, actual - valor)
+        else:
+            nuevo = valor
+        self.so.fijar_volumen(nuevo)
+        return f"🔊 Volumen al {nuevo} %."
 
     # ─── Memoria explícita ───────────────────────────────────────────────────
 

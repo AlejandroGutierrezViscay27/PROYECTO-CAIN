@@ -1,17 +1,24 @@
 """
 ControlSO sobre Windows, con ctypes (sin dependencias).
 
-Fase 10.1: solo lectura. Las únicas llamadas a la API de Windows son de
-consulta (EnumWindows, GetWindowText, GetSystemPowerStatus...). Los
-procesos se abren con PROCESS_QUERY_LIMITED_INFORMATION, que solo permite
-preguntar su nombre: ni leer su memoria ni terminarlos.
+Fase 10.1: lectura. Las llamadas de consulta (EnumWindows, GetWindowText,
+GetSystemPowerStatus...) y los procesos se abren con
+PROCESS_QUERY_LIMITED_INFORMATION, que solo permite preguntar su nombre: ni
+leer su memoria ni terminarlos.
+
+Fase 10.2: abrir apps de la lista blanca (sin consola, con un entorno sin
+secretos), teclas multimedia y el volumen general (Core Audio).
 """
 import ctypes
 import os
 import platform
 import shutil
+import subprocess
 from ctypes import wintypes
 
+from core import memory
+from core.arnes import reglas, sistema
+from core.arnes.rutas import Denegado
 from so.base import ControlSO, Ventana
 
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
@@ -139,3 +146,175 @@ class WindowsSO(ControlSO):
             "disco_total":   disco.total,
             "disco_libre":   disco.free,
         }
+
+    # ─── Fase 10.2 ───────────────────────────────────────────────────────────
+
+    def abrir_app(self, ruta, argumentos):
+        permitidos = [reglas.argumentos_app(nombre) for nombre in reglas.apps_permitidas()]
+        if list(argumentos) not in permitidos:
+            raise Denegado("esos argumentos no son los fijos de la app")
+        if list(argumentos) == reglas.argumentos_app("navegador"):
+            _preparar_perfil_navegador()
+        _lanzar(ruta, list(argumentos))
+
+    def abrir_url(self, url):
+        url = sistema.validar_url(url)
+        ruta, argumentos = sistema.resolver_app("navegador")
+        _preparar_perfil_navegador()
+        _lanzar(ruta, [*argumentos, url])
+
+    def multimedia(self, accion):
+        tecla = _TECLAS_MULTIMEDIA[sistema.validar_multimedia(accion)]
+        _user32.keybd_event(tecla, 0, KEYEVENTF_EXTENDEDKEY, 0)
+        _user32.keybd_event(tecla, 0, KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP, 0)
+
+    def volumen(self):
+        return _con_volumen(_leer_volumen)
+
+    def fijar_volumen(self, porcentaje):
+        _, porcentaje = sistema.validar_volumen("fijar", porcentaje)
+        _con_volumen(lambda endpoint: _escribir_volumen(endpoint, porcentaje))
+
+    def silenciar(self, silenciado):
+        _con_volumen(lambda endpoint: _escribir_mute(endpoint, silenciado))
+
+
+# ─── Fase 10.2: abrir apps ───────────────────────────────────────────────────
+
+_SIN_CONSOLA = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+
+# Preferencias iniciales del perfil del navegador de CAIN: pregunta antes de
+# descargar y no concede cámara, micrófono, ubicación ni notificaciones.
+_PREFERENCIAS_NAVEGADOR = {
+    "download": {"prompt_for_download": True},
+    "profile": {"default_content_setting_values": {
+        "notifications": 2, "geolocation": 2,
+        "media_stream_camera": 2, "media_stream_mic": 2,
+    }},
+}
+
+
+def _entorno_app():
+    return {k: v for k, v in os.environ.items() if k.upper() in reglas.ENTORNO_APPS}
+
+
+def _lanzar(ruta, argumentos):
+    """Abre el programa sin consola y sin esperarlo. Nunca con shell."""
+    if not sistema.es_ejecutable_permitido(ruta):
+        raise Denegado("ese programa no está en la lista de apps permitidas")
+    subprocess.Popen(
+        [ruta, *argumentos],
+        cwd=os.path.dirname(ruta),
+        env=_entorno_app(),
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        close_fds=True, creationflags=_SIN_CONSOLA,
+    )
+
+
+def _preparar_perfil_navegador():
+    """La primera vez, crea el perfil de CAIN con preferencias prudentes."""
+    preferencias = os.path.join(reglas.CARPETA_NAVEGADOR, "Default", "Preferences")
+    if not os.path.exists(preferencias):
+        os.makedirs(os.path.dirname(preferencias), exist_ok=True)
+        memory._guardar_json(preferencias, _PREFERENCIAS_NAVEGADOR)
+
+
+# ─── Fase 10.2: teclas multimedia ────────────────────────────────────────────
+
+KEYEVENTF_EXTENDEDKEY = 0x1
+KEYEVENTF_KEYUP       = 0x2
+_TECLAS_MULTIMEDIA = {
+    "siguiente":         0xB0,   # VK_MEDIA_NEXT_TRACK
+    "anterior":          0xB1,   # VK_MEDIA_PREV_TRACK
+    "reproducir_pausar": 0xB3,   # VK_MEDIA_PLAY_PAUSE
+}
+
+_user32.keybd_event.argtypes = [wintypes.BYTE, wintypes.BYTE, wintypes.DWORD, ctypes.c_size_t]
+
+
+# ─── Fase 10.2: volumen (Core Audio, IAudioEndpointVolume) ───────────────────
+
+class _GUID(ctypes.Structure):
+    _fields_ = [("Data1", wintypes.DWORD), ("Data2", wintypes.WORD),
+                ("Data3", wintypes.WORD), ("Data4", ctypes.c_ubyte * 8)]
+
+
+_ole32 = ctypes.OleDLL("ole32")
+_ole32.CLSIDFromString.argtypes  = [wintypes.LPCWSTR, ctypes.POINTER(_GUID)]
+_ole32.CoInitializeEx.argtypes   = [ctypes.c_void_p, wintypes.DWORD]
+_ole32.CoInitializeEx.restype    = ctypes.c_long   # S_FALSE no es error: se mira a mano
+_ole32.CoUninitialize.restype    = None
+_ole32.CoCreateInstance.argtypes = [ctypes.POINTER(_GUID), ctypes.c_void_p, wintypes.DWORD,
+                                    ctypes.POINTER(_GUID), ctypes.POINTER(ctypes.c_void_p)]
+
+CLSID_MMDeviceEnumerator = "BCDE0395-E52F-467C-8E3D-C4579291692E"
+IID_IMMDeviceEnumerator  = "A95664D2-9614-4F35-A746-DE8DB63617E6"
+IID_IAudioEndpointVolume = "5CDF2C82-841E-4546-9722-0CF74078229A"
+CLSCTX_ALL               = 0x17
+COINIT_APARTMENTTHREADED = 0x2
+E_RENDER, E_MULTIMEDIA   = 0, 1
+
+# Índices en la vtable de IAudioEndpointVolume
+_SET_NIVEL, _GET_NIVEL, _SET_MUTE, _GET_MUTE = 7, 9, 14, 15
+
+
+def _guid(texto):
+    guid = _GUID()
+    _ole32.CLSIDFromString("{" + texto + "}", ctypes.byref(guid))
+    return guid
+
+
+def _metodo(objeto, indice, *argtypes):
+    """Método `indice` de la vtable de un objeto COM (puntero en un c_void_p)."""
+    vtable = ctypes.cast(objeto, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))).contents
+    funcion = ctypes.WINFUNCTYPE(ctypes.HRESULT, ctypes.c_void_p, *argtypes)(vtable[indice])
+    return lambda *args: funcion(objeto, *args)
+
+
+def _liberar(objeto):
+    if objeto:
+        vtable = ctypes.cast(objeto, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))).contents
+        ctypes.WINFUNCTYPE(wintypes.ULONG, ctypes.c_void_p)(vtable[2])(objeto)
+
+
+def _con_volumen(operacion):
+    """
+    Llama a operacion(endpoint) con el IAudioEndpointVolume del altavoz por
+    defecto. Inicializa COM en este hilo si hace falta (cada turno de CAIN
+    puede correr en un hilo distinto).
+    """
+    hr = _ole32.CoInitializeEx(None, COINIT_APARTMENTTHREADED)
+    inicializado = hr in (0, 1)   # S_OK, S_FALSE; si no, ya estaba en otro modo
+    enumerador, dispositivo, endpoint = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
+    try:
+        _ole32.CoCreateInstance(ctypes.byref(_guid(CLSID_MMDeviceEnumerator)), None, CLSCTX_ALL,
+                                ctypes.byref(_guid(IID_IMMDeviceEnumerator)), ctypes.byref(enumerador))
+        # IMMDeviceEnumerator::GetDefaultAudioEndpoint
+        _metodo(enumerador, 4, ctypes.c_int, ctypes.c_int, ctypes.POINTER(ctypes.c_void_p))(
+            E_RENDER, E_MULTIMEDIA, ctypes.byref(dispositivo))
+        # IMMDevice::Activate
+        _metodo(dispositivo, 3, ctypes.POINTER(_GUID), wintypes.DWORD, ctypes.c_void_p,
+                ctypes.POINTER(ctypes.c_void_p))(
+            ctypes.byref(_guid(IID_IAudioEndpointVolume)), CLSCTX_ALL, None, ctypes.byref(endpoint))
+        return operacion(endpoint)
+    finally:
+        for objeto in (endpoint, dispositivo, enumerador):
+            _liberar(objeto)
+        if inicializado:
+            _ole32.CoUninitialize()
+
+
+def _leer_volumen(endpoint):
+    nivel, mute = ctypes.c_float(), wintypes.BOOL()
+    _metodo(endpoint, _GET_NIVEL, ctypes.POINTER(ctypes.c_float))(ctypes.byref(nivel))
+    _metodo(endpoint, _GET_MUTE, ctypes.POINTER(wintypes.BOOL))(ctypes.byref(mute))
+    return round(nivel.value * 100), bool(mute.value)
+
+
+def _escribir_mute(endpoint, silenciado):
+    _metodo(endpoint, _SET_MUTE, wintypes.BOOL, ctypes.c_void_p)(bool(silenciado), None)
+
+
+def _escribir_volumen(endpoint, porcentaje):
+    _metodo(endpoint, _SET_NIVEL, ctypes.c_float, ctypes.c_void_p)(porcentaje / 100, None)
+    _escribir_mute(endpoint, False)

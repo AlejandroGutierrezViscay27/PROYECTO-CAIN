@@ -1,11 +1,15 @@
 """
-Fase 10.1 — observar el sistema: ventanas abiertas e info del equipo (N0).
+Fase 10.1 — observar el sistema (N0). Fase 10.2 — abrir apps y URLs, multimedia y volumen (N1).
 """
 import os
+import shutil
+import tempfile
 import unittest
 from unittest import mock
 
 from core import agent as agent_mod
+from core.arnes import auditoria, reglas, sistema
+from core.arnes.rutas import Denegado
 from core.tool_schemas import TOOLS_SO
 from so import crear_control_so
 from so.base import ControlSO, Ventana
@@ -31,10 +35,14 @@ class TestFabrica(unittest.TestCase):
             with self.assertRaises(ValueError):
                 crear_control_so()
 
-    def test_la_interfaz_solo_lee(self):
-        # 10.1 es N0: si alguien añade un método que actúa, que sea a propósito
-        # (con su nivel en el arnés y sus pruebas), no por accidente.
-        self.assertEqual(ControlSO.__abstractmethods__, frozenset({"ventanas", "info_sistema"}))
+    def test_la_interfaz_declara_cada_poder(self):
+        # Si alguien añade un método que actúa, que sea a propósito (con su
+        # nivel en el arnés y sus pruebas), no por accidente.
+        self.assertEqual(ControlSO.__abstractmethods__, frozenset({
+            "ventanas", "info_sistema",                                   # 10.1, N0
+            "abrir_app", "abrir_url", "multimedia",                       # 10.2, N1
+            "volumen", "fijar_volumen", "silenciar",
+        }))
 
 
 class BaseConSO(BaseAgente):
@@ -109,6 +117,86 @@ class TestObservar(BaseConSO):
         self.assertEqual(self.cain.historial, [])
 
 
+class TestActuar(BaseConSO):
+    """Fase 10.2: abrir apps y URLs, multimedia y volumen (N1)."""
+
+    def setUp(self):
+        self.so = SimuladoSO()
+        super().setUp()
+        self.carpeta = tempfile.mkdtemp(prefix="cain_apps_")
+        self.addCleanup(shutil.rmtree, self.carpeta, ignore_errors=True)
+        self.spotify = os.path.join(self.carpeta, "Spotify.exe")
+        self.brave = os.path.join(self.carpeta, "brave.exe")
+        for ruta in (self.spotify, self.brave):
+            open(ruta, "w").close()
+        apps = {"navegador": [self.brave], "spotify": [self.spotify]}
+        parche = mock.patch.object(reglas, "apps_permitidas", lambda: apps)
+        parche.start()
+        self.addCleanup(parche.stop)
+
+    def usar(self, herramienta, origen="local", **argumentos):
+        return self.cain._usar_herramienta(herramienta, argumentos, origen=origen)
+
+    def acciones(self):
+        return [l for l in self.so.llamadas if isinstance(l, tuple)]
+
+    def test_abrir_app(self):
+        self.assertEqual(self.usar("sistema_abrir_app", app="spotify"), "🚀 Abrí Spotify.")
+        self.assertEqual(self.acciones(), [("abrir_app", self.spotify, [])])
+
+    def test_abrir_una_app_fuera_de_la_lista(self):
+        respuesta = self.usar("sistema_abrir_app", app="cmd")
+        self.assertTrue(respuesta.startswith("🛡️"))
+        self.assertEqual(self.acciones(), [])
+        self.assertEqual(auditoria.ultimos(1)[0]["resultado"], "denegado")
+
+    def test_abrir_url(self):
+        respuesta = self.usar("sistema_abrir_url", url="https://www.youtube.com/results?search_query=lofi")
+        self.assertIn("navegador de CAIN", respuesta)
+        self.assertEqual(self.acciones(), [("abrir_url", "https://www.youtube.com/results?search_query=lofi")])
+
+    def test_una_url_peligrosa_no_llega_al_sistema(self):
+        for url in ("file:///C:/Windows/System32/cmd.exe", "http://localhost:8000/api/auditoria",
+                    "--user-data-dir=C:\\Windows"):
+            self.assertTrue(self.usar("sistema_abrir_url", url=url).startswith("🛡️"), url)
+        self.assertEqual(self.acciones(), [])
+
+    def test_la_segunda_barrera(self):
+        # Aunque el agente se saltara la validación, so/ no lanza nada fuera de la lista.
+        with self.assertRaises(Denegado):
+            self.so.abrir_app(os.path.join(self.carpeta, "otro.exe"), [])
+        with self.assertRaises(Denegado):
+            self.so.abrir_url("javascript:alert(1)")
+
+    def test_multimedia(self):
+        self.assertEqual(self.usar("sistema_multimedia", accion="siguiente"), "⏭️ Siguiente.")
+        self.assertTrue(self.usar("sistema_multimedia", accion="apagar").startswith("🛡️"))
+        self.assertEqual(self.acciones(), [("multimedia", "siguiente")])
+
+    def test_volumen(self):
+        self.assertEqual(self.usar("sistema_volumen", accion="subir"), "🔊 Volumen al 60 %.")
+        self.assertEqual(self.usar("sistema_volumen", accion="bajar", valor=90), "🔊 Volumen al 0 %.")
+        self.assertEqual(self.usar("sistema_volumen", accion="fijar", valor=35), "🔊 Volumen al 35 %.")
+        self.assertEqual(self.usar("sistema_volumen", accion="silenciar"), "🔇 Silenciado.")
+        self.assertEqual(self.usar("sistema_volumen", accion="activar_sonido"), "🔊 Sonido activado (35 %).")
+        self.assertTrue(self.usar("sistema_volumen", accion="fijar", valor=500).startswith("🛡️"))
+        self.assertEqual(self.so.volumen(), (35, False))
+
+    def test_info_incluye_el_volumen(self):
+        self.assertIn("🔊 Volumen: 50 %", self.usar("sistema_info"))
+
+    def test_desde_el_movil(self):
+        # Decisión del usuario: poner música o un vídeo desde el móvil, sí (N1).
+        self.assertEqual(self.usar("sistema_multimedia", origen="remoto", accion="reproducir_pausar"),
+                         "⏯️ Listo: play/pausa.")
+
+    def test_el_resultado_no_llega_al_historial(self):
+        self.cain.llm.chat_with_tools = lambda *a, **k: {"tool_call": {
+            "name": "sistema_abrir_url", "arguments": {"url": "https://www.youtube.com"}}}
+        self.assertIn("youtube", self.cain.chat("abre youtube"))
+        self.assertEqual(self.cain.historial, [])
+
+
 class TestFormato(unittest.TestCase):
 
     def test_duracion(self):
@@ -137,6 +225,44 @@ class TestWindowsReal(unittest.TestCase):
         self.assertGreater(info["disco_total"], 0)
         self.assertGreaterEqual(info["disco_libre"], 0)
         self.assertTrue(info["sistema"].startswith("Windows"))
+
+    def test_volumen_real_sin_cambiarlo(self):
+        from so.windows import WindowsSO
+        try:
+            porcentaje, silenciado = WindowsSO().volumen()
+        except OSError:
+            self.skipTest("sin dispositivo de audio")
+        self.assertTrue(0 <= porcentaje <= 100)
+        self.assertIsInstance(silenciado, bool)
+
+    def test_no_lanza_nada_que_no_toque(self):
+        # Popen parcheado: se comprueba qué se lanzaría, sin lanzar nada.
+        from so import windows
+        so = windows.WindowsSO()
+        with mock.patch.object(windows.subprocess, "Popen") as popen, \
+             mock.patch.object(windows, "_preparar_perfil_navegador"), \
+             mock.patch.dict(os.environ, {"OPENAI_API_KEY": "sk-secreto", "CAIN_TOKEN": "t"}):
+            for ruta in (os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "cmd.exe"),
+                         os.path.join(os.path.expanduser("~"), "Downloads", "brave.exe")):
+                with self.assertRaises(Denegado):
+                    so.abrir_app(ruta, [])
+            with self.assertRaises(Denegado):
+                so.abrir_url("file:///C:/Windows")
+            try:
+                ruta, argumentos = sistema.resolver_app("navegador")
+            except Denegado:
+                self.skipTest("sin navegador instalado")
+            with self.assertRaises(Denegado):   # argumentos que no son los fijos
+                so.abrir_app(ruta, ["--disable-web-security"])
+            popen.assert_not_called()
+
+            so.abrir_url("https://www.youtube.com")
+            comando = popen.call_args.args[0]
+            self.assertEqual(comando, [ruta, *argumentos, "https://www.youtube.com"])
+            entorno = popen.call_args.kwargs["env"]
+            self.assertNotIn("OPENAI_API_KEY", entorno)
+            self.assertNotIn("CAIN_TOKEN", entorno)
+            self.assertNotIn("shell", popen.call_args.kwargs)
 
 
 if __name__ == "__main__":
