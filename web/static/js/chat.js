@@ -13,6 +13,21 @@ function agregarMensaje(tipo, contenido) {
 
   chatContainer.appendChild(div);
   scrollAbajo();
+  return div;
+}
+
+// Botón "Abrir proyecto" bajo un mensaje de CAIN. Es un enlace normal: un
+// toque del usuario nunca lo bloquea el navegador, a diferencia de abrirlo
+// solo desde código.
+function agregarBotonProyecto(mensaje, url) {
+  const enlace       = document.createElement("a");
+  enlace.className   = "proyecto-abrir";
+  enlace.href        = url;
+  enlace.target      = "_blank";
+  enlace.rel         = "noopener";
+  enlace.textContent = "▶ Abrir proyecto";
+  mensaje.querySelector(".message-content").appendChild(enlace);
+  scrollAbajo();
 }
 
 function formatearContenido(texto) {

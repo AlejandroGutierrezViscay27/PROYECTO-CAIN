@@ -234,12 +234,15 @@ async def websocket_endpoint(websocket: WebSocket):
         await gestor.difundir({"tipo": "mensaje_usuario", "contenido": mensaje}, excepto=dispositivo)
 
         canal = "voz" if hablar else "texto"
+        # Proyecto que CAIN creó en este turno (url servida en /proyectos/).
+        proyectos = []
         # Un turno a la vez: si otro dispositivo está hablando con CAIN, este
         # espera. Los callbacks se inyectan por turno, para quien lo pidió.
         async with gestor.turno:
             await gestor.difundir({"tipo": "estado", "estado": "pensando"})
             cain_agent._confirmar_fn = confirmar_fn
             cain_agent._estado_fn    = estado_fn
+            cain_agent._abrir_fn     = proyectos.append
             try:
                 respuesta = await loop.run_in_executor(pool, cain_agent.chat, mensaje, canal)
             except Exception as e:
@@ -251,6 +254,7 @@ async def websocket_endpoint(websocket: WebSocket):
             finally:
                 cain_agent._confirmar_fn = None
                 cain_agent._estado_fn    = None
+                cain_agent._abrir_fn     = None
             emocion, intensidad = cain_agent.emocion.dominante()
 
         # El chat muestra la respuesta tal cual; a la voz le llega sin
@@ -260,13 +264,16 @@ async def websocket_endpoint(websocket: WebSocket):
         # "voz" avisa al cliente de que viene audio detrás: así sabe que CAIN
         # va a hablar (umbral de eco del VAD, barge-in) antes de que llegue.
         # Solo suena en el dispositivo que habló. "emocion" tiñe La Cara.
+        # "proyecto": todos ven el botón para abrirlo; "abrir": solo quien lo
+        # pidió intenta abrirlo solo (el navegador puede bloquearlo).
         datos = {
             "tipo": "respuesta", "contenido": respuesta, "estado": "listo",
-            "voz": False,
+            "voz": False, "abrir": False,
+            "proyecto": proyectos[-1] if proyectos else None,
             "emocion": {"nombre": emocion, "intensidad": intensidad},
         }
         await gestor.difundir(datos, excepto=dispositivo)
-        await gestor.enviar(dispositivo, {**datos, "voz": bool(texto_voz)})
+        await gestor.enviar(dispositivo, {**datos, "voz": bool(texto_voz), "abrir": bool(proyectos)})
 
         if texto_voz:
             try:

@@ -71,7 +71,9 @@ Variables de entorno en `.env` (ver `.env` para el listado completo):
   dispositivos ven la misma conversación; un turno a la vez (`turno`); la
   confirmación y el audio van solo al dispositivo que pidió. Los proyectos
   web los sirve el propio FastAPI en `/proyectos/<nombre>/` (rutas validadas
-  con `executor.archivo_de_proyecto`).
+  con `executor.archivo_de_proyecto`). Al crear uno en modo web,
+  `ejecutar_proyecto(..., abrir_en_pc=False)` no abre nada en el PC: el url
+  llega por `cain._abrir_fn` y va en la respuesta (`proyecto`, `abrir`).
 - `data/` — memoria persistida y voces de Piper (`data/voices/`). No está
   en git. Archivos: `memoria.json` (historial), `memoria_usuario.json`
   (perfil), `memoria_larga.json` (director), `uso_llm.json` (gasto);

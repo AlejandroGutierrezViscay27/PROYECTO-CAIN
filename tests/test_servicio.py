@@ -36,6 +36,9 @@ class CainFalso:
         if mensaje == "haz un proyecto":
             confirmado = self._confirmar_fn({"archivos": ["main.py"], "comando": "python main.py", "nombre": "demo"})
             return f"confirmado: {confirmado}"
+        if mensaje == "haz una pagina":
+            self._abrir_fn("/proyectos/pagina_1/index.html")
+            return "en vivo"
         return f"eco: {mensaje}"
 
 
@@ -192,6 +195,31 @@ class TestVariosDispositivos(unittest.TestCase):
                 self.assertNotIn("confirmacion", [d["tipo"] for d in del_pc])
                 self.assertEqual(del_pc[-1]["contenido"], "confirmado: True")
 
+    def test_el_proyecto_creado_se_abre_en_quien_lo_pidio(self):
+        with TestClient(app_mod.app, client=LOCAL) as cliente:
+            with cliente.websocket_connect("/ws") as pc, cliente.websocket_connect("/ws") as movil:
+                movil.send_json({"mensaje": "haz una pagina"})
+
+                del_movil = recibir_hasta(movil, "respuesta")[-1]
+                self.assertEqual(del_movil["proyecto"], "/proyectos/pagina_1/index.html")
+                self.assertTrue(del_movil["abrir"])
+
+                # El PC ve el botón, pero no se le abre nada solo.
+                del_pc = recibir_hasta(pc, "respuesta")[-1]
+                self.assertEqual(del_pc["proyecto"], "/proyectos/pagina_1/index.html")
+                self.assertFalse(del_pc["abrir"])
+
+        # El callback es solo para ese turno.
+        self.assertIsNone(app_mod.cain_agent._abrir_fn)
+
+    def test_respuesta_sin_proyecto(self):
+        with TestClient(app_mod.app, client=LOCAL) as cliente:
+            with cliente.websocket_connect("/ws") as pc:
+                pc.send_json({"mensaje": "hola"})
+                respuesta = recibir_hasta(pc, "respuesta")[-1]
+                self.assertIsNone(respuesta["proyecto"])
+                self.assertFalse(respuesta["abrir"])
+
     def test_si_quien_confirma_se_desconecta_el_turno_se_cancela(self):
         with TestClient(app_mod.app, client=LOCAL) as cliente:
             with cliente.websocket_connect("/ws") as pc:
@@ -236,6 +264,40 @@ class TestProyectos(unittest.TestCase):
         self.assertEqual(executor.html_principal(["juego.html", "app.js"]), "juego.html")
         self.assertIsNone(executor.html_principal(["main.py"]))
 
+    def test_proyecto_web_en_modo_web_no_abre_nada_en_el_pc(self):
+        with mock.patch.object(executor, "abrir_servidor_web") as servidor, \
+             mock.patch.object(executor.webbrowser, "open") as navegador:
+            mensaje, url, error = executor.ejecutar_proyecto(
+                "cubo", {"index.html": "<h1>cubo</h1>"}, "web", abrir_en_pc=False
+            )
+        servidor.assert_not_called()
+        navegador.assert_not_called()
+        self.assertIsNone(error)
+        self.assertRegex(url, r"^/proyectos/cubo_\d+/index\.html$")
+        # Y el servidor de CAIN lo sirve en esa url.
+        cliente = TestClient(app_mod.app, client=LOCAL)
+        self.assertEqual(cliente.get(url).text, "<h1>cubo</h1>")
+
+    def test_proyecto_web_en_modo_terminal_abre_en_el_pc(self):
+        with mock.patch.object(executor, "abrir_servidor_web", return_value="http://localhost:8080") as servidor:
+            _, url, _ = executor.ejecutar_proyecto("cubo", {"index.html": "<h1>cubo</h1>"}, "web")
+        servidor.assert_called_once()
+        self.assertEqual(url, "http://localhost:8080")
+
+    def test_imagen_de_proyecto_python_en_modo_web(self):
+        def ejecutar(ruta):
+            # El script "genera" su imagen, como haría matplotlib.
+            with open(os.path.join(os.path.dirname(ruta), "output.png"), "wb") as f:
+                f.write(b"png")
+            return True, "✅ Ejecutado correctamente.", None
+
+        with mock.patch.object(executor, "ejecutar_python", side_effect=ejecutar), \
+             mock.patch.object(executor.os, "startfile", create=True) as startfile:
+            _, url, error = executor.ejecutar_proyecto("grafica", {"main.py": "..."}, "python", abrir_en_pc=False)
+        startfile.assert_not_called()
+        self.assertIsNone(error)
+        self.assertRegex(url, r"^/proyectos/grafica_\d+/output\.png$")
+
     def test_abrir_devuelve_url_relativa_servida_por_cain(self):
         cliente = TestClient(app_mod.app, client=LOCAL)
         datos   = cliente.post("/api/proyectos/web_1234/abrir").json()
@@ -243,6 +305,38 @@ class TestProyectos(unittest.TestCase):
         self.assertEqual(cliente.get(datos["url"]).text, "<h1>hola</h1>")
         self.assertEqual(cliente.get("/proyectos/web_1234/css/estilo.css").text, "h1 {}")
         self.assertEqual(cliente.get("/proyectos/web_1234/..%2Fsecreto.txt").status_code, 404)
+
+
+from tests.test_director import BaseAgente  # noqa: E402 — Cain sin red ni disco
+
+
+class TestAgenteAbreEnElDispositivo(BaseAgente):
+
+    def setUp(self):
+        super().setUp()
+        from core import agent as agent_mod
+        plan = {"nombre": "cubo", "archivos": {"index.html": "<h1>cubo</h1>"}}
+        for parche in (
+            mock.patch.object(agent_mod.prompts, "generar_plan_proyecto", return_value=plan),
+            mock.patch.object(agent_mod.executor, "ejecutar_proyecto",
+                              return_value=("✅ creado", "/proyectos/cubo_1/index.html", None)),
+        ):
+            parche.start()
+            self.addCleanup(parche.stop)
+        self.ejecutar = agent_mod.executor.ejecutar_proyecto
+        self.cain     = agent_mod.Cain()
+        self.cain._confirmar_fn = lambda plan: True
+
+    def test_modo_web_entrega_la_url_y_no_abre_el_pc(self):
+        abiertos = []
+        self.cain._abrir_fn = abiertos.append
+        self.cain._flujo_ejecutar_proyecto({"descripcion": "un cubo", "tipo": "web"})
+        self.assertEqual(abiertos, ["/proyectos/cubo_1/index.html"])
+        self.assertFalse(self.ejecutar.call_args.kwargs["abrir_en_pc"])
+
+    def test_sin_callback_abre_en_el_pc(self):
+        self.cain._flujo_ejecutar_proyecto({"descripcion": "un cubo", "tipo": "web"})
+        self.assertTrue(self.ejecutar.call_args.kwargs["abrir_en_pc"])
 
 
 if __name__ == "__main__":

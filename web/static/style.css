@@ -377,6 +377,22 @@ html, body {
   text-align: right;
 }
 
+/* Botón para abrir el proyecto que CAIN acaba de crear */
+.proyecto-abrir {
+  display: inline-block;
+  margin-top: 0.7rem;
+  padding: 0.45rem 0.9rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  color: var(--text);
+  background: var(--accent-glow);
+  text-decoration: none;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  transition: var(--transition);
+}
+.proyecto-abrir:hover { background: var(--accent); color: white; }
+
 .welcome-message .message-content {
   border-left-color: var(--gold);
   font-family: var(--font-display);

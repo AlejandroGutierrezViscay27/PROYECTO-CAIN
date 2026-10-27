@@ -162,9 +162,11 @@ def mostrar_plan(archivos, comando_ejecucion):
     )
 
 
-def describir_comando(tipo, archivos):
+def describir_comando(tipo, archivos, abrir_en_pc=True):
     """Genera una descripción legible del comando que se va a ejecutar."""
     if tipo == "web":
+        if not abrir_en_pc:
+            return "servido por CAIN en /proyectos/ (se abre en tu dispositivo)"
         return "python -m http.server (puerto libre automático)"
     elif tipo == "python":
         py_file = next((a for a in archivos if a.endswith(".py")), archivos[0])
@@ -212,10 +214,20 @@ def corregir_y_reintentar(llm, ruta_archivo, error, mensaje_original, intentos=2
     )
 
 
-def ejecutar_proyecto(nombre_proyecto, archivos_contenido, tipo):
+def url_en_cain(ruta_proyecto, archivo):
+    """URL relativa con la que el servidor web de CAIN sirve un archivo del proyecto."""
+    return f"/proyectos/{os.path.basename(ruta_proyecto)}/{archivo}"
+
+
+def ejecutar_proyecto(nombre_proyecto, archivos_contenido, tipo, abrir_en_pc=True):
     """
     Flujo completo: crea carpeta, guarda archivos, ejecuta y retorna resultado.
     Retorna tupla (mensaje, url, info_error).
+
+    abrir_en_pc: modo terminal — levanta un http.server y abre el navegador
+    (o la imagen) en esta máquina. Con False (modo web) no abre nada aquí:
+    la url es relativa al servidor de CAIN y la abre el dispositivo que
+    pidió el proyecto, sea el PC o el móvil.
     """
     ruta_proyecto = preparar_carpeta_proyecto(nombre_proyecto)
 
@@ -231,12 +243,19 @@ def ejecutar_proyecto(nombre_proyecto, archivos_contenido, tipo):
         if not archivo_principal:
             return "❌ No encontré un archivo HTML principal.", None, None
 
-        url     = abrir_servidor_web(ruta_proyecto)
-        mensaje = (
-            f"✅ Proyecto '{nombre_proyecto}' creado y ejecutado.\n"
-            f"🌐 Abierto en: {url}\n"
-            f"📁 Archivos en: {ruta_proyecto}"
-        )
+        if abrir_en_pc:
+            url     = abrir_servidor_web(ruta_proyecto)
+            mensaje = (
+                f"✅ Proyecto '{nombre_proyecto}' creado y ejecutado.\n"
+                f"🌐 Abierto en: {url}\n"
+                f"📁 Archivos en: {ruta_proyecto}"
+            )
+        else:
+            url     = url_en_cain(ruta_proyecto, archivo_principal)
+            mensaje = (
+                f"✅ Proyecto '{nombre_proyecto}' creado.\n"
+                f"📁 Archivos en: {ruta_proyecto}"
+            )
         return mensaje, url, None
 
     elif tipo == "python":
@@ -248,20 +267,26 @@ def ejecutar_proyecto(nombre_proyecto, archivos_contenido, tipo):
 
         exito, mensaje_ejecucion, error = ejecutar_python(archivo_principal)
 
-        # Si generó una imagen, abrirla automáticamente
+        # Si generó una imagen, abrirla automáticamente (en el PC, o en el
+        # dispositivo que lo pidió si es el modo web)
+        url         = None
         ruta_imagen = os.path.join(ruta_proyecto, "output.png")
         if exito and os.path.exists(ruta_imagen):
-            try:
-                os.startfile(os.path.abspath(ruta_imagen))
+            if not abrir_en_pc:
+                url = url_en_cain(ruta_proyecto, "output.png")
                 mensaje_ejecucion += f"\n🖼️ Imagen guardada: {ruta_imagen}"
-            except Exception:
-                mensaje_ejecucion += f"\n🖼️ Imagen guardada en: {ruta_imagen}"
+            else:
+                try:
+                    os.startfile(os.path.abspath(ruta_imagen))
+                    mensaje_ejecucion += f"\n🖼️ Imagen guardada: {ruta_imagen}"
+                except Exception:
+                    mensaje_ejecucion += f"\n🖼️ Imagen guardada en: {ruta_imagen}"
 
         mensaje = (
             f"📁 Archivos en: {ruta_proyecto}\n\n"
             f"{mensaje_ejecucion}"
         )
-        return mensaje, None, (archivo_principal, error) if not exito else None
+        return mensaje, url, (archivo_principal, error) if not exito else None
 
     else:
         mensaje = (

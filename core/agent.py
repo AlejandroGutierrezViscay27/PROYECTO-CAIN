@@ -207,8 +207,11 @@ class Cain:
         if not archivos:
             return "🎭 No pude generar el proyecto. ¿Puedes darme más detalles?"
 
+        # Modo web: el proyecto lo abre el dispositivo que lo pidió (vía
+        # self._abrir_fn de app.py), no el navegador de esta máquina.
+        abrir_fn       = getattr(self, "_abrir_fn", None)
         lista_archivos = list(archivos.keys())
-        comando        = executor.describir_comando(tipo, lista_archivos)
+        comando        = executor.describir_comando(tipo, lista_archivos, abrir_en_pc=not abrir_fn)
 
         # ── Confirmación: web o terminal ─────────────────────────────────────
         if hasattr(self, "_confirmar_fn") and self._confirmar_fn:
@@ -233,11 +236,16 @@ class Cain:
         if hasattr(self, "_estado_fn") and self._estado_fn:
             self._estado_fn("ejecutando")
 
-        resultado, url, info_error = executor.ejecutar_proyecto(nombre_proyecto, archivos, tipo)
+        resultado, url, info_error = executor.ejecutar_proyecto(
+            nombre_proyecto, archivos, tipo, abrir_en_pc=not abrir_fn
+        )
 
         if info_error:
             ruta_archivo, error = info_error
             resultado = executor.corregir_y_reintentar(self.llms["codigo"], ruta_archivo, error, resultado)
+
+        if url and abrir_fn:
+            abrir_fn(url)
 
         if url:
             return f"🎭 ¡El espectáculo está en vivo!\n\n{resultado}"

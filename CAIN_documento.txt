@@ -156,7 +156,9 @@ CAIN ya es un agente funcional con las siguientes capacidades:
   ✦ Un turno a la vez; la confirmación de un proyecto y la voz van
     solo al dispositivo que los pidió
   ✦ Los proyectos web los sirve el propio CAIN (/proyectos/...): se
-    abren y se ejecutan directamente en el móvil
+    abren y se ejecutan directamente en el móvil. Al crear uno, se
+    abre en el dispositivo que lo pidió (las imágenes de los
+    proyectos Python también)
   ✦ HTTPS opcional (certificado de mkcert) para hablarle desde el móvil
   ✦ Interfaz adaptada al móvil: memoria y proyectos en un cajón (☰)
 
@@ -318,7 +320,7 @@ DECISIÓN DE DISEÑO CLAVE — Capa LLM Abstracta:
    llega a La Cara y a la prosodia de Piper; y un LLM por rol con
    registro de gasto.
 
-🔧 FASE 9 — CAIN COMO SERVICIO (en construcción)
+✅ FASE 9 — CAIN COMO SERVICIO
    FastAPI completo, accesible desde cualquier dispositivo
    en la red local. Multi-dispositivo real.
    Hecho y probado en un móvil real: acceso por token (CAIN_TOKEN;
@@ -327,8 +329,9 @@ DECISIÓN DE DISEÑO CLAVE — Capa LLM Abstracta:
    solo para quien pidió, historial al entrar, proyectos servidos
    por el propio CAIN (las páginas 3D corren en el móvil), HTTPS
    con mkcert para la voz y panel lateral como cajón en el móvil.
-   Pendiente: que los proyectos que CAIN crea desde el chat se
-   abran en el dispositivo que los pidió (hoy abren en el PC).
+   Los proyectos que CAIN crea desde el chat se abren en el
+   dispositivo que los pidió (botón "Abrir proyecto" en el chat),
+   no en el navegador del PC.
 
 ⏳ FASE 10 — CONTROL DEL SISTEMA OPERATIVO
    Mouse, teclado, aplicaciones, navegador. CAIN actúa

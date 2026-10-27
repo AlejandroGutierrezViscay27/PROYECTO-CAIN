@@ -86,7 +86,13 @@ function manejarMensaje(data) {
   if (data.tipo === "respuesta") {
     quitarTyping();
     cerrarModal();
-    agregarMensaje("cain", data.contenido);
+    const mensaje = agregarMensaje("cain", data.contenido);
+    if (data.proyecto) {
+      agregarBotonProyecto(mensaje, data.proyecto);
+      // Solo en el dispositivo que lo pidió. Si el navegador bloquea la
+      // ventana (no hubo toque reciente), queda el botón.
+      if (data.abrir) window.open(data.proyecto, "_blank");
+    }
     if (data.voz) state.audioPendiente = true;
     if (data.emocion) setFaceEmocion(data.emocion);
     setStatus("En línea", false);
