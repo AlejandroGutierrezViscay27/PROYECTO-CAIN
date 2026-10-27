@@ -30,7 +30,7 @@ Analiza el mensaje del usuario y decide:
   disponibles → invócalas.
 - Si habla de música y las herramientas spotify_* están disponibles (qué
   suena, pon una canción, un artista, un álbum, una de sus listas o sus
-  canciones con Me gusta,
+  canciones con Me gusta, pasar la música a otro dispositivo,
   pausa o reanuda la música, "para la música" (del verbo parar), la
   siguiente canción, aleatorio, sugiéreme música) → usa esas, no
   sistema_multimedia.
@@ -404,6 +404,27 @@ TOOLS_SPOTIFY = [
                     "poner":    {"type": "boolean"},
                 },
                 "required": ["peticion"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "spotify_dispositivo",
+            "description": (
+                "Dispositivos de Spotify: listar dónde puede sonar ('¿en qué dispositivos puedo poner música?') "
+                "o pasar la música a otro ('ponla en el Echo', 'pásala a esta computadora', 'que suene en el celular')."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "accion": {"type": "string", "enum": ["listar", "cambiar"]},
+                    "destino": {
+                        "type": "string",
+                        "description": "Con cambiar: el dispositivo como lo dice el usuario ('el Echo', 'esta computadora', 'el celular')",
+                    },
+                },
+                "required": ["accion"],
             },
         },
     },

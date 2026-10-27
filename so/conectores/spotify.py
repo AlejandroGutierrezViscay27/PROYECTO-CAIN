@@ -266,6 +266,13 @@ class ClienteSpotify:
         params = {"device_id": dispositivo} if dispositivo else None
         self._api("PUT", "/me/player/play", params=params, cuerpo=cuerpo or None)
 
+    def transferir(self, dispositivo, sonar):
+        """
+        Pasa la reproducción a otro dispositivo. sonar: que siga sonando allí
+        (si estaba en pausa, se queda en pausa). El id ya viene validado.
+        """
+        self._api("PUT", "/me/player", cuerpo={"device_ids": [dispositivo], "play": bool(sonar)})
+
     def pausar(self):
         self._api("PUT", "/me/player/pause")
 

@@ -132,6 +132,11 @@ class SpotifyFalso:
                                                            "reason": "NO_ACTIVE_DEVICE"}})
             self.reproduciendo = True
             return ORDEN_ACEPTADA
+        if (metodo, ruta) == ("PUT", "/me/player"):
+            destino = json.loads(request.content)["device_ids"][0]
+            for d in self.dispositivos:
+                d["is_active"] = d["id"] == destino
+            return ORDEN_ACEPTADA
         if (metodo, ruta) == ("PUT", "/me/player/pause"):
             self.reproduciendo = False
             return ORDEN_ACEPTADA
@@ -726,6 +731,121 @@ class TestContexto(BaseAgenteSpotify):
         self.turno("pon mi lista del gym", "spotify_control", accion="siguiente")
         self.cain._olvidar_conversaciones()
         self.assertEqual(len(self.cain.turnos_recientes), 0)
+
+
+class TestCambiarDispositivo(BaseAgenteSpotify):
+    """Pasar la música de un dispositivo a otro (como los del usuario)."""
+
+    def setUp(self):
+        super().setUp()
+        self.conectar()
+        self.falso.item, self.falso.reproduciendo = cancion(1, "X", "Y"), True
+        self.falso.dispositivos = [
+            {"id": "pc", "name": "PC_ALEJANDRO", "type": "Computer", "is_active": False},
+            {"id": "movil", "name": "2510EPC8BG", "type": "Smartphone", "is_active": False},
+            {"id": "echo", "name": "Echo Dot Alejandro", "type": "Speaker", "is_active": True},
+        ]
+
+    def cambiar(self, destino, **extra):
+        return self.usar("spotify_dispositivo", accion="cambiar", destino=destino, **extra)
+
+    def transferencias(self):
+        return [json.loads(p.content) for p in self.falso.hechas("PUT", "/me/player")]
+
+    def test_listar(self):
+        respuesta = self.usar("spotify_dispositivo", accion="listar")
+        self.assertIn("💻 PC_ALEJANDRO", respuesta)
+        self.assertIn("🔊 Echo Dot Alejandro · sonando aquí", respuesta)
+        self.assertEqual(self.transferencias(), [])
+
+    def test_por_apodo(self):
+        # Spotify llama al PC por su nombre de red; la gente dice "esta computadora".
+        self.assertEqual(self.cambiar("esta computadora"), "💻 Pasé la música a PC_ALEJANDRO.")
+        self.assertEqual(self.transferencias(), [{"device_ids": ["pc"], "play": True}])
+        self.assertEqual(self.cambiar("el celular"), "📱 Pasé la música a 2510EPC8BG.")
+        self.assertEqual(self.cambiar("Alexa"), "🔊 Pasé la música a Echo Dot Alejandro.")
+
+    def test_por_nombre(self):
+        self.cambiar("pc")
+        self.assertEqual(self.cambiar("echo dot de alejandro"), "🔊 Pasé la música a Echo Dot Alejandro.")
+
+    def test_si_ya_esta_ahi(self):
+        self.assertEqual(self.cambiar("el Echo"), "🔈 La música ya está en Echo Dot Alejandro.")
+        self.assertEqual(self.transferencias(), [])
+
+    def test_en_pausa_se_queda_en_pausa(self):
+        self.falso.reproduciendo = False
+        self.assertIn("en pausa", self.cambiar("la compu"))
+        self.assertEqual(self.transferencias(), [{"device_ids": ["pc"], "play": False}])
+
+    def test_uno_que_no_existe(self):
+        respuesta = self.cambiar("la nevera")
+        self.assertIn("No veo «la nevera»", respuesta)
+        self.assertIn("PC_ALEJANDRO", respuesta)
+        self.assertEqual(self.transferencias(), [])
+
+    def test_si_hay_dudas_pregunta(self):
+        self.falso.dispositivos.append({"id": "portatil", "name": "PORTATIL", "type": "Computer"})
+        self.assertIn("¿A cuál?", self.cambiar("la computadora"))
+        self.assertEqual(self.transferencias(), [])
+
+    def test_uno_restringido(self):
+        self.falso.dispositivos[0]["is_restricted"] = True
+        self.assertIn("no deja controlar", self.cambiar("el pc"))
+        self.assertEqual(self.transferencias(), [])
+
+    def test_el_id_sale_de_la_api_no_del_llm(self):
+        self.cambiar("el pc", device_id="otro-dispositivo", id="x")
+        self.assertEqual(self.transferencias(), [{"device_ids": ["pc"], "play": True}])
+
+    def test_un_id_raro_de_la_api_no_se_usa(self):
+        self.falso.dispositivos[0]["id"] = "pc ../../me"
+        self.assertTrue(self.cambiar("el pc").startswith("🛡️"))
+        self.assertEqual(self.transferencias(), [])
+
+    def test_sin_destino_o_accion_rara(self):
+        self.assertTrue(self.usar("spotify_dispositivo", accion="cambiar").startswith("🛡️"))
+        self.assertTrue(self.usar("spotify_dispositivo", accion="apagar", destino="pc").startswith("🛡️"))
+
+    def test_sin_dispositivos(self):
+        self.falso.dispositivos = []
+        self.assertIn("despiértalo", self.usar("spotify_dispositivo", accion="listar"))
+        self.assertIn("despiértalo", self.cambiar("el Echo"))
+
+    def test_desde_el_movil(self):
+        self.assertEqual(self.usar("spotify_dispositivo", origen="remoto", accion="cambiar", destino="pc"),
+                         "💻 Pasé la música a PC_ALEJANDRO.")
+
+
+class TestTeclaMultimediaConSpotify(BaseAgenteSpotify):
+    """La tecla multimedia no llega al Echo: si Spotify suena, se le pide a Spotify."""
+
+    def setUp(self):
+        self.so = SimuladoSO()
+        super().setUp()
+        self.conectar()
+        self.falso.item = cancion(1, "X", "Y")
+
+    def teclas(self):
+        return [l for l in self.so.llamadas if isinstance(l, tuple) and l[0] == "multimedia"]
+
+    def test_si_spotify_suena_va_por_spotify(self):
+        self.falso.reproduciendo = True
+        self.assertEqual(self.usar("sistema_multimedia", accion="siguiente"), "⏭️ Siguiente.")
+        self.assertEqual(len(self.falso.hechas("POST", "/me/player/next")), 1)
+        self.assertEqual(self.usar("sistema_multimedia", accion="reproducir_pausar"), "⏸️ Pausado.")
+        self.assertEqual(self.teclas(), [])
+
+    def test_si_spotify_no_suena_usa_la_tecla(self):
+        # Puede ser un vídeo en el navegador.
+        self.assertEqual(self.usar("sistema_multimedia", accion="siguiente"), "⏭️ Siguiente.")
+        self.assertEqual(self.teclas(), [("multimedia", "siguiente")])
+        self.assertEqual(self.falso.hechas("POST"), [])
+
+    def test_sin_conectar_usa_la_tecla(self):
+        self.cliente.desconectar()
+        self.assertEqual(self.usar("sistema_multimedia", accion="anterior"), "⏮️ Anterior.")
+        self.assertEqual(self.teclas(), [("multimedia", "anterior")])
 
 
 # ─── Rutas web ───────────────────────────────────────────────────────────────

@@ -97,6 +97,7 @@ class Cain:
                 "spotify_reproducir": self._spotify_reproducir,
                 "spotify_control":    self._spotify_control,
                 "spotify_sugerir":    self._spotify_sugerir,
+                "spotify_dispositivo": self._spotify_cambiar_dispositivo,
             })
 
     # ─── Punto de entrada ────────────────────────────────────────────────────
@@ -397,8 +398,29 @@ class Cain:
 
     def _sistema_multimedia(self, argumentos):
         accion = sistema.validar_multimedia(argumentos.get("accion"))
+        por_spotify = self._multimedia_por_spotify(accion)
+        if por_spotify:
+            return por_spotify
         self.so.multimedia(accion)
         return self.MENSAJE_MULTIMEDIA[accion]
+
+    EQUIVALENTE_SPOTIFY = {"reproducir_pausar": "pausar", "siguiente": "siguiente", "anterior": "anterior"}
+
+    def _multimedia_por_spotify(self, accion):
+        """
+        La tecla multimedia solo llega a lo que suena en este PC: si Spotify
+        está sonando (aquí o en el Echo), se le pide a Spotify. Si no suena o
+        no responde, None y se usa la tecla. Mismo nivel (N1) en ambos casos.
+        """
+        if not self.spotify:
+            return None
+        try:
+            if not (self.spotify.estado() or {}).get("is_playing"):
+                return None
+        except ErrorConector:
+            return None
+        print(f"[DEBUG] sistema_multimedia({accion}) -> Spotify, que esta sonando")
+        return self._spotify_control({"accion": self.EQUIVALENTE_SPOTIFY[accion]})
 
     def _sistema_volumen(self, argumentos):
         accion, valor = sistema.validar_volumen(argumentos.get("accion"), argumentos.get("valor"))
@@ -671,6 +693,70 @@ su lista de más escuchadas."""
             self._spotify_sonar(pistas=uris)
             return f"▶️ Te puse esto:\n{lista}"
         return f"🎵 Te sugiero:\n{lista}\nDime cuál pongo."
+
+    # Apodo (normalizado) → tipo de dispositivo de Spotify. Spotify llama a tu
+    # PC por su nombre de red ("PC_ALEJANDRO"); la gente dice "la compu".
+    APODOS_DISPOSITIVO = {
+        "Computer":   {"computadora", "computador", "compu", "pc", "ordenador", "portatil", "laptop", "escritorio"},
+        "Speaker":    {"echo", "alexa", "parlante", "bocina", "altavoz", "dot"},
+        "Smartphone": {"celular", "movil", "telefono", "cel", "smartphone"},
+        "Tablet":     {"tablet", "tableta", "ipad"},
+        "TV":         {"tele", "tv", "television", "televisor"},
+    }
+    ICONO_DISPOSITIVO = {"Computer": "💻", "Speaker": "🔊", "Smartphone": "📱", "Tablet": "📱", "TV": "📺"}
+    RELLENO_DISPOSITIVO = frozenset({"el", "la", "los", "mi", "este", "esta", "ese", "esa", "al", "a", "de",
+                                     "en", "pasala", "pasa", "cambia", "pon", "musica", "dispositivo"})
+
+    def _spotify_cambiar_dispositivo(self, argumentos):
+        accion = arnes_spotify.validar_accion_dispositivo(argumentos.get("accion"))
+        dispositivos = self.spotify.dispositivos()
+        if accion == "listar":
+            if not dispositivos:
+                return "🔈 Spotify no ve ningún dispositivo ahora. Abre Spotify en alguno (a un Echo, despiértalo con «Alexa, pon Spotify»)."
+            lineas = ["🔈 Dispositivos de Spotify:"]
+            for d in dispositivos:
+                marca = " · sonando aquí" if d.get("is_active") else ""
+                lineas.append(f"  {self.ICONO_DISPOSITIVO.get(d.get('type'), '🔈')} {self._nombre_dispositivo(d)}{marca}")
+            return "\n".join(lineas)
+
+        destino = arnes_spotify.validar_consulta(argumentos.get("destino"))
+        candidatos = self._buscar_dispositivo(destino, dispositivos)
+        if not candidatos:
+            nombres = ", ".join(self._nombre_dispositivo(d) for d in dispositivos) or "ninguno"
+            return (f"🔈 No veo «{destino}» entre tus dispositivos de Spotify (veo: {nombres}). "
+                    "Si es un Echo, despiértalo con «Alexa, pon Spotify» y vuelve a pedírmelo.")
+        if len(candidatos) > 1:
+            nombres = ", ".join(self._nombre_dispositivo(d) for d in candidatos)
+            return f"🔈 ¿A cuál? Hay varios que encajan con «{destino}»: {nombres}."
+        elegido = candidatos[0]
+        nombre = self._nombre_dispositivo(elegido)
+        if elegido.get("is_active"):
+            return f"🔈 La música ya está en {nombre}."
+        if elegido.get("is_restricted"):
+            return f"🔈 Spotify no deja controlar {nombre} desde fuera."
+        sonando = bool((self.spotify.estado() or {}).get("is_playing"))
+        self.spotify.transferir(arnes_spotify.validar_id_dispositivo(elegido.get("id")), sonar=sonando)
+        icono = self.ICONO_DISPOSITIVO.get(elegido.get("type"), "🔈")
+        return f"{icono} Pasé la música a {nombre}." if sonando else f"{icono} Listo: Spotify queda en {nombre} (en pausa)."
+
+    @staticmethod
+    def _nombre_dispositivo(d):
+        return str(d.get("name") or "sin nombre")[:60]
+
+    def _buscar_dispositivo(self, destino, dispositivos):
+        """Los dispositivos que encajan: por nombre exacto, por palabras del nombre o por apodo del tipo."""
+        buscado = arnes_spotify.normalizar_nombre(destino)
+        palabras = [p for p in buscado.split() if p not in self.RELLENO_DISPOSITIVO]
+        nombres = [(arnes_spotify.normalizar_nombre(self._nombre_dispositivo(d)), d) for d in dispositivos]
+        exactos = [d for nombre, d in nombres if nombre == buscado]
+        if exactos:
+            return exactos
+        if palabras:
+            por_nombre = [d for nombre, d in nombres if all(p in nombre.split() for p in palabras)]
+            if por_nombre:
+                return por_nombre
+        tipos = {tipo for tipo, apodos in self.APODOS_DISPOSITIVO.items() if apodos & set(palabras)}
+        return [d for d in dispositivos if d.get("type") in tipos]
 
     def _spotify_sonar(self, contexto=None, pistas=None, desde=None):
         """Reproduce; si no hay dispositivo activo, busca uno (o abre la app de escritorio)."""

@@ -35,6 +35,7 @@ NIVEL_HERRAMIENTA = {
     "spotify_reproducir": N1,  # solo lo que exista en Spotify (URI de la API, no del LLM)
     "spotify_control":   N1,   # pausar, reanudar, siguiente, anterior, aleatorio
     "spotify_sugerir":   N1,   # cada propuesta del LLM se busca antes de sonar
+    "spotify_dispositivo": N1, # pasar la música a otro dispositivo (id de la API, no del LLM)
     "crear_archivo":     N1,   # nunca sobrescribe
     "editar_archivo":    N1,   # guarda la versión anterior en .respaldos/
     "memoria_recordar":  N1,

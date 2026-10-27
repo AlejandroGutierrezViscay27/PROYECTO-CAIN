@@ -1,7 +1,7 @@
 # Fase 10 — Control del sistema operativo: plan y arnés de seguridad
 
 > Estado: **10.0, 10.1, 10.2 y 10.4 implementadas** (arnés, observar el
-> sistema, abrir apps y URLs, multimedia y volumen, Spotify por API; 251
+> sistema, abrir apps y URLs, multimedia y volumen, Spotify por API; 267
 > pruebas en verde). Decisiones de la primera ronda tomadas (§11). WhatsApp y el
 > teclado/ratón genéricos están en **10.P — Pendientes de diseño** (§12).
 
@@ -421,7 +421,7 @@ pero tarda en arrancar.
 | 10.P | **Pendientes de diseño**: WhatsApp, teclado y ratón genéricos | — | ⏸️ §12 |
 
 Orden propuesto: 10.1 → 10.2 → 10.4 (Spotify no depende del navegador) →
-10.3 → 10.5 → 10.6 → 10.8. Lo de 10.P entra cuando se resuelva, como etapa
+10.3 → 10.5 → 10.6 → 10.8. **Siguiente: 10.3** (10.1, 10.2 y 10.4 cerradas). Lo de 10.P entra cuando se resuelva, como etapa
 nueva.
 
 ---
@@ -571,9 +571,10 @@ rechaza porque no tiene nivel declarado en `reglas.py`.
 - **Herramientas** (todas N0/N1, se pueden pedir desde el móvil; solo se
   ofrecen al LLM si hay `SPOTIFY_CLIENT_ID` en el `.env`):
   `spotify_que_suena`, `spotify_mis_listas`, `spotify_buscar` (N0);
-  `spotify_reproducir` (canción, artista, álbum, lista pública o **una
-  lista tuya por su nombre**), `spotify_control` (pausar, reanudar,
-  siguiente, anterior, aleatorio) y `spotify_sugerir` (N1).
+  `spotify_reproducir` (canción, artista, álbum, lista pública, **una
+  lista tuya por su nombre** o tus Me gusta), `spotify_control` (pausar,
+  reanudar, siguiente, anterior, aleatorio), `spotify_sugerir` y
+  `spotify_dispositivo` (N1).
 - **Conector** `so/conectores/spotify.py` (httpx, sin dependencias nuevas):
   - OAuth "Authorization Code con **PKCE**", sin secreto de cliente. El
     `state` se gasta al usarse y caduca a los 10 minutos: una web no puede
@@ -607,7 +608,7 @@ rechaza porque no tiene nivel declarado en `reglas.py`.
   máximo 10 resultados, las listas llaman `items` a lo que era `tracks` y
   ya no existe `artists/{id}/top-tracks` (un artista se pone como
   contexto). El código ya lo tiene en cuenta.
-- **Pruebas**: 73 nuevas (251 en total) contra un Spotify falso
+- **Pruebas**: 89 nuevas (267 en total) contra un Spotify falso
   (`httpx.MockTransport`): state inventado, reusado o caducado, rutas desde
   otro dispositivo y por DNS rebinding, URIs malformados de la API o del
   LLM, bucles de 401, URLs `next` hacia otro sitio, token fuera del
@@ -656,3 +657,18 @@ rechaza porque no tiene nivel declarado en `reglas.py`.
        herramienta (los escribió el enrutador, no vienen de fuera).
      Enrutador real: 32 de 32 en tres rondas, con la conversación tal como
      pasó.
+- **Cambiar de dispositivo** (`spotify_dispositivo`, N1): listar dónde
+  puede sonar y pasar la música a otro (`PUT /me/player`; si estaba en
+  pausa, sigue en pausa). El LLM da el nombre como lo dice el usuario; el id
+  sale de la API y se valida. Apodos por tipo ("esta computadora" →
+  PC_ALEJANDRO, "Alexa"/"el parlante" → el Echo, "el celular" → el
+  móvil); si encajan varios, pregunta. Los Echo desaparecen de la lista
+  cuando llevan rato sin uso: CAIN pide despertarlo. Probado sin transferir
+  contra los tres dispositivos reales, y después por el usuario: la música
+  pasa del Echo al PC y vuelve.
+- **La tecla multimedia no llega al Echo**: si `sistema_multimedia` llega
+  mientras Spotify suena en cualquier dispositivo, se le pide a Spotify
+  (mismo nivel N1). Con la herramienta nueva, el enrutador mandaba siempre
+  "pon la siguiente canción" a la tecla; el respaldo en código lo cubre.
+  Enrutador real: 40 de 40 en conversaciones de varios turnos (tres
+  rondas).

@@ -57,6 +57,23 @@ def validar_uri(uri, tipos):
     return uri
 
 
+ACCIONES_DISPOSITIVO = ("listar", "cambiar")
+_ID_DISPOSITIVO = re.compile(r"^[A-Za-z0-9_-]{1,100}$")
+
+
+def validar_accion_dispositivo(accion):
+    if accion not in ACCIONES_DISPOSITIVO:
+        raise Denegado("esa acción de dispositivos no existe")
+    return accion
+
+
+def validar_id_dispositivo(id_dispositivo):
+    """El id viene de la API (nunca del LLM); igual se comprueba su forma."""
+    if not isinstance(id_dispositivo, str) or not _ID_DISPOSITIVO.match(id_dispositivo):
+        raise Denegado("Spotify devolvió un dispositivo que no reconozco")
+    return id_dispositivo
+
+
 def normalizar_nombre(texto):
     """Para comparar nombres de listas: sin mayúsculas, tildes ni signos."""
     texto = unicodedata.normalize("NFKD", str(texto)).casefold()
