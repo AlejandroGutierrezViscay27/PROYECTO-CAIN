@@ -1,0 +1,372 @@
+{
+  "communities": {
+    "0": [
+      "web_static_app",
+      "web_static_app_abrirproyecto",
+      "web_static_app_actualizarmemoriapanel",
+      "web_static_app_agregarmensaje",
+      "web_static_app_autoresize",
+      "web_static_app_bloquearinput",
+      "web_static_app_cargarmemoria",
+      "web_static_app_cargarproyectos",
+      "web_static_app_cerrarmodal",
+      "web_static_app_chatcontainer",
+      "web_static_app_conectar",
+      "web_static_app_escapehtml",
+      "web_static_app_formatearcontenido",
+      "web_static_app_manejarmensaje",
+      "web_static_app_messageinput",
+      "web_static_app_mostrarmodalcargando",
+      "web_static_app_mostrarmodalcodigo",
+      "web_static_app_mostrarmodalconfirmacion",
+      "web_static_app_mostrartyping",
+      "web_static_app_pedirmodificacion",
+      "web_static_app_quitartyping",
+      "web_static_app_reejecutarproyecto",
+      "web_static_app_responderconfirmacion",
+      "web_static_app_scrollabajo",
+      "web_static_app_sendbtn",
+      "web_static_app_sendmessage",
+      "web_static_app_setstatus",
+      "web_static_app_state",
+      "web_static_app_statusdot",
+      "web_static_app_statustext"
+    ],
+    "1": [
+      "core_agent_cain",
+      "core_agent_cain_actualizar_resumen",
+      "core_agent_cain_actualizar_usuario",
+      "core_agent_cain_borrar_archivo",
+      "core_agent_cain_chat",
+      "core_agent_cain_conversar",
+      "core_agent_cain_corregir_y_reintentar",
+      "core_agent_cain_crear_archivo",
+      "core_agent_cain_describir_comando",
+      "core_agent_cain_detectar_accion",
+      "core_agent_cain_detectar_intencion",
+      "core_agent_cain_editar_archivo",
+      "core_agent_cain_editar_archivo_inteligente",
+      "core_agent_cain_flujo_ejecutar_proyecto",
+      "core_agent_cain_flujo_memoria",
+      "core_agent_cain_generar_contenido_archivo",
+      "core_agent_cain_generar_nombre_archivo",
+      "core_agent_cain_generar_plan_proyecto",
+      "core_agent_cain_leer_archivo",
+      "core_agent_rationale_11",
+      "core_agent_rationale_136",
+      "core_agent_rationale_185",
+      "core_agent_rationale_29",
+      "core_agent_rationale_362",
+      "core_agent_rationale_429",
+      "core_agent_rationale_89",
+      "main",
+      "main_modo_terminal",
+      "main_modo_web"
+    ],
+    "2": [
+      "cain",
+      "cain_actualizar_resumen",
+      "cain_agregar_a_archivo",
+      "cain_borrar_archivo",
+      "cain_cargar_memoria",
+      "cain_cargar_resumen",
+      "cain_cargar_usuario",
+      "cain_crear_archivo",
+      "cain_detectar_accion",
+      "cain_detectar_intencion_ia",
+      "cain_detectar_intereses",
+      "cain_detectar_intereses_ia",
+      "cain_detectar_nombre",
+      "cain_detectar_rol",
+      "cain_editar_archivo_inteligente",
+      "cain_es_misma_intencion_archivo",
+      "cain_evitar_sobrescritura",
+      "cain_extraer_nombre_archivo",
+      "cain_generar_contenido_archivo",
+      "cain_generar_nombre_archivo",
+      "cain_generar_nombre_archivo_inteligente",
+      "cain_guardar_memoria",
+      "cain_guardar_resumen",
+      "cain_guardar_usuario",
+      "cain_hablar_con_cain",
+      "cain_leer_archivo",
+      "cain_obtener_prompt_por_intencion",
+      "cain_resolver_archivo"
+    ],
+    "3": [
+      "core_executor",
+      "core_executor_abrir_servidor_web",
+      "core_executor_detectar_tipo",
+      "core_executor_ejecutar_proyecto",
+      "core_executor_ejecutar_python",
+      "core_executor_encontrar_puerto_libre",
+      "core_executor_guardar_archivo_proyecto",
+      "core_executor_mostrar_plan",
+      "core_executor_preparar_carpeta_proyecto",
+      "core_executor_rationale_126",
+      "core_executor_rationale_21",
+      "core_executor_rationale_30",
+      "core_executor_rationale_40",
+      "core_executor_rationale_50",
+      "core_executor_rationale_61",
+      "core_executor_rationale_88",
+      "get",
+      "post",
+      "request",
+      "web_app",
+      "web_app_abrir_proyecto",
+      "web_app_get_memory",
+      "web_app_get_proyectos",
+      "web_app_index",
+      "web_app_websocket_endpoint",
+      "websocket"
+    ],
+    "4": [
+      "abc",
+      "core_agent",
+      "core_agent_cain_init",
+      "core_prompts",
+      "core_prompts_construir_prompt",
+      "core_prompts_rationale_97",
+      "llm_base",
+      "llm_base_llmprovider",
+      "llm_base_llmprovider_chat",
+      "llm_base_rationale_12",
+      "llm_base_rationale_5",
+      "llm_ollama_provider",
+      "llm_ollama_provider_ollamaprovider",
+      "llm_ollama_provider_ollamaprovider_chat",
+      "llm_ollama_provider_ollamaprovider_init",
+      "llm_ollama_provider_rationale_16",
+      "llm_ollama_provider_rationale_3",
+      "llm_openai_provider",
+      "llm_openai_provider_openaiprovider",
+      "llm_openai_provider_openaiprovider_chat",
+      "llm_openai_provider_openaiprovider_init",
+      "llm_openai_provider_rationale_19",
+      "llm_openai_provider_rationale_9"
+    ],
+    "5": [
+      "core_memory",
+      "core_memory_agregar_nota",
+      "core_memory_cargar_memoria",
+      "core_memory_cargar_resumen",
+      "core_memory_cargar_usuario",
+      "core_memory_consultar_memoria",
+      "core_memory_guardar_memoria",
+      "core_memory_guardar_resumen",
+      "core_memory_guardar_usuario",
+      "core_memory_limpiar_historial_completo",
+      "core_memory_olvidar_campo",
+      "core_memory_olvidar_nota",
+      "core_memory_rationale_53",
+      "core_memory_rationale_63",
+      "core_memory_rationale_76",
+      "core_memory_rationale_83",
+      "core_memory_rationale_91",
+      "core_memory_truncar_historial"
+    ],
+    "6": [
+      "core_intent",
+      "core_intent_detectar_accion_llm",
+      "core_intent_detectar_intencion_llm",
+      "core_intent_detectar_intereses_llm",
+      "core_intent_detectar_nombre",
+      "core_intent_detectar_rol",
+      "core_intent_detectar_tipo_proyecto_llm",
+      "core_intent_es_misma_intencion_archivo",
+      "core_intent_extraer_contenido_memoria",
+      "core_intent_rationale_110",
+      "core_intent_rationale_138",
+      "core_intent_rationale_165",
+      "core_intent_rationale_198",
+      "core_intent_rationale_210",
+      "core_intent_rationale_217",
+      "core_intent_rationale_37",
+      "core_intent_rationale_7"
+    ],
+    "7": [
+      "core_tools",
+      "core_tools_agregar_a_archivo",
+      "core_tools_borrar_archivo",
+      "core_tools_crear_archivo",
+      "core_tools_evitar_sobrescritura",
+      "core_tools_extraer_nombre_archivo",
+      "core_tools_generar_nombre_timestamp",
+      "core_tools_leer_archivo",
+      "core_tools_rationale_14",
+      "core_tools_rationale_25",
+      "core_tools_rationale_31",
+      "core_tools_rationale_9",
+      "core_tools_resolver_archivo"
+    ],
+    "8": [
+      "core_init"
+    ],
+    "9": [
+      "llm_init"
+    ],
+    "10": [
+      "tests_init"
+    ]
+  },
+  "cohesion": {
+    "0": 0.1471264367816092,
+    "1": 0.11330049261083744,
+    "2": 0.12698412698412698,
+    "3": 0.10461538461538461,
+    "4": 0.11067193675889328,
+    "5": 0.1111111111111111,
+    "6": 0.11764705882352941,
+    "7": 0.16666666666666666,
+    "8": 1.0,
+    "9": 1.0,
+    "10": 1.0
+  },
+  "gods": [
+    {
+      "id": "core_agent_cain",
+      "label": "Cain",
+      "degree": 25
+    },
+    {
+      "id": "cain_hablar_con_cain",
+      "label": "hablar_con_cain()",
+      "degree": 21
+    },
+    {
+      "id": "web_static_app_manejarmensaje",
+      "label": "manejarMensaje()",
+      "degree": 11
+    },
+    {
+      "id": "web_static_app_cerrarmodal",
+      "label": "cerrarModal()",
+      "degree": 9
+    },
+    {
+      "id": "llm_base_llmprovider",
+      "label": "LLMProvider",
+      "degree": 8
+    },
+    {
+      "id": "llm_openai_provider_openaiprovider",
+      "label": "OpenAIProvider",
+      "degree": 8
+    },
+    {
+      "id": "web_static_app_agregarmensaje",
+      "label": "agregarMensaje()",
+      "degree": 7
+    },
+    {
+      "id": "core_executor_ejecutar_proyecto",
+      "label": "ejecutar_proyecto()",
+      "degree": 6
+    },
+    {
+      "id": "llm_ollama_provider_ollamaprovider",
+      "label": "OllamaProvider",
+      "degree": 5
+    },
+    {
+      "id": "web_static_app_abrirproyecto",
+      "label": "abrirProyecto()",
+      "degree": 5
+    }
+  ],
+  "surprises": [
+    {
+      "source": "Cain",
+      "target": "OpenAIProvider",
+      "source_files": [
+        "core/agent.py",
+        "llm/openai_provider.py"
+      ],
+      "confidence": "INFERRED",
+      "relation": "uses",
+      "why": "inferred connection - not explicitly stated in source; connects across different repos/directories; bridges separate communities"
+    },
+    {
+      "source": "modo_terminal()",
+      "target": "Cain",
+      "source_files": [
+        "main.py",
+        "core/agent.py"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "connects across different repos/directories; peripheral node `modo_terminal()` unexpectedly reaches hub `Cain`"
+    },
+    {
+      "source": "abrir_proyecto()",
+      "target": "encontrar_puerto_libre()",
+      "source_files": [
+        "web/app.py",
+        "core/executor.py"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "connects across different repos/directories"
+    },
+    {
+      "source": "OllamaProvider",
+      "target": "LLMProvider",
+      "source_files": [
+        "llm/ollama_provider.py",
+        "llm/base.py"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "inherits",
+      "why": "cross-file semantic connection"
+    },
+    {
+      "source": "OpenAIProvider",
+      "target": "LLMProvider",
+      "source_files": [
+        "llm/openai_provider.py",
+        "llm/base.py"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "inherits",
+      "why": "cross-file semantic connection"
+    }
+  ],
+  "questions": [
+    {
+      "type": "bridge_node",
+      "question": "Why does `Cain` connect `Cain` to `executor.py`, `agent.py`?",
+      "why": "High betweenness centrality (0.181) - this node is a cross-community bridge."
+    },
+    {
+      "type": "bridge_node",
+      "question": "Why does `OpenAIProvider` connect `agent.py` to `Cain`?",
+      "why": "High betweenness centrality (0.075) - this node is a cross-community bridge."
+    },
+    {
+      "type": "isolated_nodes",
+      "question": "What connects `chatContainer`, `messageInput`, `sendBtn` to the rest of the system?",
+      "why": "6 weakly-connected nodes found - possible documentation gaps or missing edges."
+    },
+    {
+      "type": "low_cohesion",
+      "question": "Should `app.js` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.1471264367816092 - nodes in this community are weakly interconnected."
+    },
+    {
+      "type": "low_cohesion",
+      "question": "Should `Cain` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.11330049261083744 - nodes in this community are weakly interconnected."
+    },
+    {
+      "type": "low_cohesion",
+      "question": "Should `cain.py` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.12698412698412698 - nodes in this community are weakly interconnected."
+    },
+    {
+      "type": "low_cohesion",
+      "question": "Should `executor.py` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.10461538461538461 - nodes in this community are weakly interconnected."
+    }
+  ]
+}
