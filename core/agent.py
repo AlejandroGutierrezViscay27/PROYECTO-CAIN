@@ -4,10 +4,12 @@ from llm.registro import RegistroUso
 from core import memory, tools, intent, prompts, executor, director, emocion, arnes
 from core.arnes import auditoria, reglas, revision_codigo, rutas, sistema
 from core.arnes import spotify as arnes_spotify
-from core.tool_schemas import TOOLS, TOOLS_SO, TOOLS_SPOTIFY, PROMPT_ENRUTADOR
-from so import crear_control_so
+from core.arnes import youtube as arnes_youtube
+from core.tool_schemas import TOOLS, TOOLS_SO, TOOLS_SPOTIFY, TOOLS_NAVEGADOR, PROMPT_ENRUTADOR
+from so import crear_control_so, crear_navegador
 from so.conectores import ErrorConector
 from so.conectores import spotify as conector_spotify
+from so.conectores.youtube import YouTube
 import time
 import copy
 import os
@@ -66,9 +68,21 @@ class Cain:
         # Las de nivel N2+ no actúan: devuelven una arnes.Accion a confirmar.
         # Control del sistema (Fase 10): None con CAIN_SO=off (por defecto).
         self.so    = crear_control_so()
+        # Navegador de CAIN y YouTube (Fase 10.3): solo con control del sistema
+        # y Playwright. No abre nada hasta que se le pide.
+        self.navegador = crear_navegador() if self.so else None
+        self.youtube   = YouTube(self.navegador) if self.navegador else None
+        # (cuando, [{url, titulo, canal, publicado}]) de la última búsqueda: "pon el 2".
+        self.ultimos_videos = (0, [])
+        # Los últimos vídeos que puso CAIN: "otro similar" no repite ninguno.
+        self.videos_puestos = deque(maxlen=self.MAX_VIDEOS_PUESTOS)
+        # "youtube" o "spotify": lo último que CAIN puso a sonar. "Pausa" o
+        # "sigue" van ahí aunque el enrutador elija el otro.
+        self.ultimo_medio = None
         # Spotify (Fase 10.4): None sin SPOTIFY_CLIENT_ID en el .env.
         self.spotify = conector_spotify.crear_cliente_spotify()
-        self.tools = TOOLS + (TOOLS_SO if self.so else []) + (TOOLS_SPOTIFY if self.spotify else [])
+        self.tools = (TOOLS + (TOOLS_SO if self.so else []) + (TOOLS_NAVEGADOR if self.navegador else [])
+                      + (TOOLS_SPOTIFY if self.spotify else []))
 
         self._herramientas = {
             "crear_archivo":     self._crear_archivo,
@@ -88,6 +102,14 @@ class Cain:
                 "sistema_abrir_url":  self._sistema_abrir_url,
                 "sistema_multimedia": self._sistema_multimedia,
                 "sistema_volumen":    self._sistema_volumen,
+            })
+        if self.navegador:
+            self._herramientas.update({
+                "navegador_pestanas": self._navegador_pestanas,
+                "youtube_buscar":     self._youtube_buscar,
+                "youtube_reproducir": self._youtube_reproducir,
+                "youtube_control":    self._youtube_control,
+                "youtube_canal":      self._youtube_canal,
             })
         if self.spotify:
             self._herramientas.update({
@@ -385,22 +407,32 @@ class Cain:
     def _sistema_abrir_app(self, argumentos):
         nombre = argumentos.get("app")
         ruta, argumentos_app = sistema.resolver_app(nombre)
-        self.so.abrir_app(ruta, argumentos_app)
         nombre = nombre.strip().lower()
+        if nombre == "navegador" and self.navegador:
+            # Lo controla Playwright: otro proceso con el mismo perfil no arrancaría.
+            self.navegador.mostrar()
+        else:
+            self.so.abrir_app(ruta, argumentos_app)
         return f"🚀 Abrí {self.NOMBRE_APP.get(nombre, nombre)}."
 
     def _sistema_abrir_url(self, argumentos):
         url = sistema.validar_url(argumentos.get("url"))
-        self.so.abrir_url(url)
+        if self.navegador:
+            self.navegador.abrir_url(url)
+        else:
+            self.so.abrir_url(url)
         if len(url) > self.LARGO_MAX_URL_MOSTRADA:
             url = url[:self.LARGO_MAX_URL_MOSTRADA] + "…"
         return f"🌐 Abrí {url} en el navegador de CAIN."
 
     def _sistema_multimedia(self, argumentos):
         accion = sistema.validar_multimedia(argumentos.get("accion"))
-        por_spotify = self._multimedia_por_spotify(accion)
-        if por_spotify:
-            return por_spotify
+        if self.ultimo_medio == "youtube":
+            por_conector = self._multimedia_por_youtube(accion) or self._multimedia_por_spotify(accion)
+        else:
+            por_conector = self._multimedia_por_spotify(accion) or self._multimedia_por_youtube(accion)
+        if por_conector:
+            return por_conector
         self.so.multimedia(accion)
         return self.MENSAJE_MULTIMEDIA[accion]
 
@@ -422,6 +454,25 @@ class Cain:
         print(f"[DEBUG] sistema_multimedia({accion}) -> Spotify, que esta sonando")
         return self._spotify_control({"accion": self.EQUIVALENTE_SPOTIFY[accion]})
 
+    EQUIVALENTE_YOUTUBE = {"reproducir_pausar": "pausar", "siguiente": "siguiente"}
+
+    def _multimedia_por_youtube(self, accion):
+        """
+        Igual con un vídeo de YouTube que se está viendo en el navegador de
+        CAIN: así "pausa" pausa (la tecla alterna) y no se pierde si la tecla
+        se la lleva otra app. Si no hay vídeo sonando, None y se usa la tecla.
+        """
+        if not self.youtube or accion not in self.EQUIVALENTE_YOUTUBE:
+            return None
+        try:
+            estado = self.youtube.estado()
+        except ErrorConector:
+            return None
+        if not estado or estado["pausado"]:
+            return None
+        print(f"[DEBUG] sistema_multimedia({accion}) -> YouTube, que esta sonando")
+        return self._youtube_control({"accion": self.EQUIVALENTE_YOUTUBE[accion]})
+
     def _sistema_volumen(self, argumentos):
         accion, valor = sistema.validar_volumen(argumentos.get("accion"), argumentos.get("valor"))
         if accion == "silenciar":
@@ -439,6 +490,187 @@ class Cain:
             nuevo = valor
         self.so.fijar_volumen(nuevo)
         return f"🔊 Volumen al {nuevo} %."
+
+    # ─── Navegador de CAIN y YouTube (Fase 10.3) ─────────────────────────────
+    # Títulos de pestañas y de vídeos son texto ajeno: van al usuario, nunca al
+    # LLM ni al historial. El LLM da qué buscar o un número de una lista que
+    # vio el usuario; el vídeo que se abre sale de la página de YouTube.
+
+    MENSAJE_YOUTUBE = {
+        ("pausar", "ok"):        "⏸️ Pausé el vídeo.",
+        ("reanudar", "ok"):      "▶️ Sigue el vídeo.",
+        ("siguiente", "ok"):     "⏭️ Siguiente vídeo.",
+        "sin_video":             "📺 En la pestaña de YouTube no hay ningún vídeo abierto.",
+        "sin_siguiente":         "📺 Este vídeo no tiene uno siguiente.",
+        "bloqueado":             "📺 El navegador no me dejó darle play; dale tú una vez en la página.",
+    }
+
+    def _titulo_corto(self, titulo):
+        if not titulo:
+            return "(sin título)"
+        return titulo if len(titulo) <= self.LARGO_MAX_TITULO else titulo[:self.LARGO_MAX_TITULO] + "…"
+
+    def _navegador_pestanas(self, argumentos):
+        accion = sistema.validar_accion_pestanas(argumentos.get("accion"))
+        pestanas = self.navegador.pestanas()
+        if not pestanas:
+            return "🌐 El navegador de CAIN no está abierto."
+        if accion == "listar":
+            lineas = [f"{'▶' if p.activa else '•'} {i}. {self._titulo_corto(p.titulo)}"
+                      for i, p in enumerate(pestanas, 1)]
+            return f"🗂️ Pestañas del navegador de CAIN ({len(pestanas)}):\n\n" + "\n".join(lineas)
+        if accion == "recargar" and argumentos.get("numero") is None:
+            # "Recarga la página": la que se ve (o la única, o la última).
+            numero = next((i for i, p in enumerate(pestanas, 1) if p.activa), len(pestanas))
+        else:
+            numero = sistema.validar_numero(argumentos.get("numero"), len(pestanas))
+        pestana = pestanas[numero - 1]
+        if accion == "cambiar":
+            self.navegador.activar(numero - 1, pestana.url)
+            return f"👉 Pestaña {numero}: {self._titulo_corto(pestana.titulo)}"
+        if accion == "recargar":
+            self.navegador.recargar(numero - 1, pestana.url)
+            return f"🔄 Recargué la pestaña {numero}: {self._titulo_corto(pestana.titulo)}"
+        self.navegador.cerrar(numero - 1, pestana.url)
+        return f"❎ Cerré la pestaña {numero}: {self._titulo_corto(pestana.titulo)}"
+
+    MAX_VIDEOS_PUESTOS = 30
+
+    @staticmethod
+    def _describir_video(video):
+        detalles = [d for d in (video["canal"], video.get("publicado")) if d]
+        return video["titulo"] + (f" — {', '.join(detalles)}" if detalles else "")
+
+    def _videos_vigentes(self):
+        cuando, videos = self.ultimos_videos
+        return videos if time.time() - cuando <= VIGENCIA_CONTEXTO else []
+
+    @staticmethod
+    def _texto(argumentos, clave):
+        valor = argumentos.get(clave)
+        return valor if isinstance(valor, str) and valor.strip() else None
+
+    def _lista_de_videos(self, titulo, videos):
+        self.ultimos_videos = (time.time(), videos)
+        lineas = [f"  {i}. {self._describir_video(v)}" for i, v in enumerate(videos, 1)]
+        return (f"{titulo} (lo dejé abierto en el navegador de CAIN):\n\n"
+                + "\n".join(lineas) + "\n\nDime cuál pongo, por ejemplo «pon el 2».")
+
+    def _youtube_buscar(self, argumentos):
+        consulta = arnes_youtube.validar_consulta(argumentos.get("consulta"))
+        videos = self.youtube.buscar(consulta)
+        if not videos:
+            self.ultimos_videos = (time.time(), [])
+            return f"🔎 No encontré vídeos de «{consulta}» en YouTube."
+        return self._lista_de_videos(f"🔎 En YouTube, «{consulta}»", videos)
+
+    def _sin_repetir(self, videos, excluir=()):
+        """El primero que CAIN no puso hace poco (ni `excluir`), o None."""
+        return next((v for v in videos if v["url"] not in self.videos_puestos and v["url"] not in excluir), None)
+
+    def _youtube_parecido(self, modo):
+        """Otro vídeo a partir del que está abierto: uno relacionado o del mismo canal."""
+        abierto = self.youtube.video_abierto()
+        if not abierto:
+            return None, "📺 No hay ningún vídeo abierto en YouTube; dime qué pongo."
+        if modo == "del_mismo_creador":
+            if not abierto["canal"]:
+                return None, "📺 No pude ver de qué canal es este vídeo."
+            try:
+                videos = self.youtube.del_mismo_canal(abierto["canal"], abierto["nombre_canal"])
+            except arnes.Denegado:
+                return None, "📺 No pude ver de qué canal es este vídeo."
+        else:
+            videos = self.youtube.relacionados()
+        video = self._sin_repetir(videos, excluir=(abierto["url"],))
+        if not video:
+            return None, "📺 No encontré otro vídeo que no hayas visto ya; dime qué pongo."
+        return video, None
+
+    def _youtube_canal(self, argumentos):
+        """Lo más nuevo de un canal: "pon el último de X" o "¿qué ha subido X?"."""
+        nombre = arnes_youtube.validar_consulta(argumentos.get("canal"))
+        canal = self.youtube.canal(nombre)
+        if not canal or not canal["videos"]:
+            return f"🔎 No encontré en YouTube un canal de «{nombre}» con vídeos."
+        if argumentos.get("poner") is not True:
+            return self._lista_de_videos(f"🆕 Lo último del canal {canal['nombre'] or 'que encontré'}",
+                                         canal["videos"])
+        self.ultimos_videos = (time.time(), canal["videos"])
+        return self._poner_video(canal["videos"][0])
+
+    def _poner_video(self, video):
+        self.youtube.reproducir(video["url"])
+        self.videos_puestos.append(video["url"])
+        self.ultimo_medio = "youtube"
+        return f"▶️ Pongo en YouTube: {self._describir_video(video)}"
+
+    def _youtube_reproducir(self, argumentos):
+        numero, consulta = argumentos.get("numero"), self._texto(argumentos, "consulta")
+        modo = argumentos.get("modo")
+        if numero is not None:
+            videos = self._videos_vigentes()
+            if not videos:
+                return "📺 No tengo una búsqueda de YouTube reciente; dime qué vídeo pongo."
+            video = videos[sistema.validar_numero(numero, len(videos)) - 1]
+        elif modo in ("parecido_de_otros", "del_mismo_creador"):
+            video, problema = self._youtube_parecido(arnes_youtube.validar_modo(modo))
+            if problema:
+                return problema
+        elif consulta:
+            consulta = arnes_youtube.validar_consulta(consulta)
+            videos = self.youtube.buscar(consulta)
+            self.ultimos_videos = (time.time(), videos)
+            if not videos:
+                return f"🔎 No encontré vídeos de «{consulta}» en YouTube."
+            # La misma búsqueda otra vez ("otro de eso") no vuelve a poner el último.
+            ultimo = self.videos_puestos[-1] if self.videos_puestos else None
+            video = next((v for v in videos if v["url"] != ultimo), videos[0])
+        else:
+            if modo is not None:
+                arnes_youtube.validar_modo(modo)
+            video = self.youtube.recomendado()
+            if not video:
+                return ("📺 La portada de YouTube no tiene recomendaciones en el navegador de CAIN: "
+                        "inicia sesión allí con tu cuenta (o mira algunos vídeos) y vuelve a pedírmelo.")
+        return self._poner_video(video)
+
+    def _youtube_control(self, argumentos):
+        accion = arnes_youtube.validar_control(argumentos.get("accion"))
+        resultado = self.youtube.control(accion)
+        if resultado == "ok" and accion != "pausar":
+            self.ultimo_medio = "youtube"
+        return self.MENSAJE_YOUTUBE.get((accion, resultado)) or self.MENSAJE_YOUTUBE[resultado]
+
+    EQUIVALENTE_CONTROL_YOUTUBE = ("pausar", "reanudar", "siguiente")
+
+    def _control_por_youtube(self, accion):
+        """
+        "Pausa", "sigue" o "la siguiente" que el enrutador mandó a Spotify,
+        pero que son del vídeo: lo último que CAIN puso fue un vídeo, o se
+        pide pausar y lo que suena es el vídeo (y Spotify no). None si no.
+        """
+        if not self.youtube or accion not in self.EQUIVALENTE_CONTROL_YOUTUBE:
+            return None
+        try:
+            estado = self.youtube.estado()
+        except ErrorConector:
+            return None
+        if not estado:
+            return None
+        # Pausar un vídeo ya pausado o reanudar uno que suena no es para él.
+        if (accion == "pausar" and estado["pausado"]) or (accion == "reanudar" and not estado["pausado"]):
+            return None
+        if self.ultimo_medio != "youtube":
+            if accion != "pausar":
+                return None
+            try:
+                if (self.spotify.estado() or {}).get("is_playing"):
+                    return None
+            except ErrorConector:
+                pass
+        print(f"[DEBUG] spotify_control({accion}) -> YouTube, el ultimo que sono")
+        return self._youtube_control({"accion": accion})
 
     # ─── Spotify (Fase 10.4) ─────────────────────────────────────────────────
     # Solo la API oficial: CAIN no toca la ventana de Spotify. El LLM da qué
@@ -619,6 +851,9 @@ su lista de más escuchadas."""
 
     def _spotify_control(self, argumentos):
         accion = arnes_spotify.validar_control(argumentos.get("accion"))
+        por_youtube = self._control_por_youtube(accion)
+        if por_youtube:
+            return por_youtube
         if accion in ("pausar", "reanudar"):
             # A diferencia de la tecla multimedia (que alterna), aquí se sabe
             # qué está sonando: "pausa" con nada sonando no reanuda.
@@ -760,6 +995,7 @@ su lista de más escuchadas."""
 
     def _spotify_sonar(self, contexto=None, pistas=None, desde=None):
         """Reproduce; si no hay dispositivo activo, busca uno (o abre la app de escritorio)."""
+        self.ultimo_medio = "spotify"
         try:
             self.spotify.reproducir(contexto=contexto, pistas=pistas, desde=desde)
         except conector_spotify.SinDispositivo:
@@ -1003,6 +1239,9 @@ su lista de más escuchadas."""
             self.memoria_larga        = memory.memoria_larga_vacia()
             self.mensajes_sin_resumir = 0
             self.turnos_recientes.clear()
+            self.ultimos_videos = (0, [])
+            self.videos_puestos.clear()
+            self.ultimo_medio = None
             self._generacion_memoria += 1
 
     # ─── Detección (delega en intent) ────────────────────────────────────────

@@ -24,8 +24,10 @@ from core.arnes import auditoria, reglas, revision_codigo
 from core.arnes import spotify as arnes_spotify
 from core.arnes.rutas import Denegado
 from core.tool_schemas import TOOLS_SPOTIFY
+from so.base import Pestana
 from so.conectores import spotify as conector
-from so.simulado import SimuladoSO
+from so.conectores import youtube as conector_youtube
+from so.simulado import NavegadorSimulado, SimuladoSO
 from tests.test_servicio import HOST_LOCAL, LOCAL, TOKEN, app_mod
 from tests.test_so import BaseConSO
 
@@ -846,6 +848,77 @@ class TestTeclaMultimediaConSpotify(BaseAgenteSpotify):
         self.cliente.desconectar()
         self.assertEqual(self.usar("sistema_multimedia", accion="anterior"), "⏮️ Anterior.")
         self.assertEqual(self.teclas(), [("multimedia", "anterior")])
+
+
+class TestSpotifyYYouTube(BaseAgenteSpotify):
+    """
+    "Pausa" o "sigue" tras poner un vídeo: el enrutador a veces elige Spotify
+    (visto en la prueba del 29/10). Van a lo último que CAIN puso a sonar.
+    """
+    VIDEO = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+
+    def setUp(self):
+        self.so = SimuladoSO()
+        self.navegador = NavegadorSimulado([Pestana("Vídeo - YouTube", self.VIDEO, True)])
+        super().setUp()
+        self.conectar()
+        self.falso.item = cancion(1, "X", "Y")
+        self.video = {"pausado": False}
+        self.control = []
+        self.navegador.respuestas[conector_youtube.GUION_ESTADO] = lambda _: dict(self.video)
+        self.navegador.respuestas[conector_youtube.GUION_CONTROL] = lambda accion: self.control.append(accion) or "ok"
+
+    def poner_video(self):
+        self.navegador.respuestas[conector_youtube.GUION_VIDEOS] = [
+            {"enlace": "/watch?v=dQw4w9WgXcQ", "titulo": "Lofi", "canal": "C"}]
+        self.usar("youtube_reproducir", consulta="lofi")
+
+    def test_tras_un_video_pausa_y_sigue_van_al_video(self):
+        self.poner_video()
+        self.assertEqual(self.usar("spotify_control", accion="pausar"), "⏸️ Pausé el vídeo.")
+        self.video["pausado"] = True
+        self.assertEqual(self.usar("spotify_control", accion="reanudar"), "▶️ Sigue el vídeo.")
+        self.assertEqual(self.usar("spotify_control", accion="siguiente"), "⏭️ Siguiente vídeo.")
+        self.assertEqual(self.control, ["pausar", "reanudar", "siguiente"])
+        self.assertEqual(self.falso.hechas("PUT"), [])
+        self.assertEqual(self.falso.hechas("POST"), [])
+
+    def test_la_tecla_multimedia_va_al_video_aunque_spotify_suene(self):
+        self.falso.reproduciendo = True   # p.ej. en el Echo
+        self.poner_video()
+        self.assertEqual(self.usar("sistema_multimedia", accion="reproducir_pausar"), "⏸️ Pausé el vídeo.")
+        self.assertEqual(self.falso.hechas("PUT"), [])
+
+    def test_tras_spotify_va_a_spotify(self):
+        self.poner_video()
+        self.falso.resultados["x"] = [cancion(1, "X", "Y")]
+        self.assertTrue(self.usar("spotify_reproducir", tipo="cancion", consulta="x").startswith("▶️ Pongo"))
+        self.falso.reproduciendo = True
+        self.assertEqual(self.usar("spotify_control", accion="pausar"), "⏸️ Pausado.")
+        self.assertEqual(self.control, [])
+
+    def test_pausar_lo_unico_que_suena_es_el_video(self):
+        # Sin haber puesto nada CAIN (p.ej. tras reiniciar): el vídeo suena y Spotify no.
+        self.assertEqual(self.usar("spotify_control", accion="pausar"), "⏸️ Pausé el vídeo.")
+        self.video["pausado"] = True
+        # Reanudar no se adivina: va a Spotify, como antes.
+        self.usar("spotify_control", accion="reanudar")
+        self.assertEqual(self.control, ["pausar"])
+
+    def test_no_pausa_un_video_pausado_ni_reanuda_uno_que_suena(self):
+        self.poner_video()
+        self.falso.reproduciendo = True
+        self.assertEqual(self.usar("spotify_control", accion="reanudar"), "▶️ Spotify ya está sonando.")
+        self.video["pausado"] = True
+        self.assertEqual(self.usar("spotify_control", accion="pausar"), "⏸️ Pausado.")
+        self.assertEqual(self.control, [])
+
+    def test_sin_video_abierto_va_a_spotify(self):
+        self.poner_video()
+        self.navegador._pestanas = []
+        self.falso.reproduciendo = True
+        self.assertEqual(self.usar("spotify_control", accion="pausar"), "⏸️ Pausado.")
+        self.assertEqual(self.control, [])
 
 
 # ─── Rutas web ───────────────────────────────────────────────────────────────

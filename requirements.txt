@@ -19,3 +19,6 @@ httpx>=0.27.0
 
 # Fase 10 - arnés: borrar = mandar a la Papelera, nunca os.remove
 send2trash>=1.8.0
+
+# Fase 10.3 - navegador de CAIN (usa el Brave/Edge instalado: sin "playwright install")
+playwright>=1.64.0

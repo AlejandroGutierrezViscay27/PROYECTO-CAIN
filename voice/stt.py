@@ -1,5 +1,12 @@
 import io
+import os
 import wave
+
+# ctranslate2 trae el runtime de Intel (libiomp5md), que en Windows instala su
+# propio manejador de Ctrl+C/Ctrl+Break: imprime "forrtl: error (200)", se
+# traga la señal e intenta abortar el proceso, que se queda colgado. Tiene que
+# estar antes de importar faster_whisper (el runtime la lee al cargarse).
+os.environ.setdefault("FOR_DISABLE_CONSOLE_CTRL_HANDLER", "1")
 
 import numpy as np
 from faster_whisper import WhisperModel

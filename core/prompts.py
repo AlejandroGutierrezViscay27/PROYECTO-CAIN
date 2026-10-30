@@ -292,7 +292,11 @@ BLOQUE_CONTEXTO_ENRUTADOR = """Contexto reciente de esta conversación, del más
 Úsalo solo para entender a qué se refiere un mensaje corto o con referencias
 ("pausa", "la siguiente", "otra de ese artista", "súbele", "y ahora algo
 más tranquilo"): si el último tema era música y hay herramientas de
-Spotify, el mensaje va por ahí aunque no diga "Spotify". "Esa lista", "de
+Spotify, el mensaje va por ahí aunque no diga "Spotify"; si era un vídeo
+de YouTube (youtube_*), por las herramientas youtube_* ("pon el 2" tras
+una búsqueda de vídeos es un resultado de esa búsqueda; "otro de él" u
+"otro similar de él" es modo del_mismo_creador, "otro parecido" es modo
+parecido_de_otros: no repitas la consulta anterior). "Esa lista", "de
 ahí" o "de esas" se refieren a lo último que se puso: repite el mismo tipo
 (si fue me_gusta, otra vez me_gusta). Si el último intento no encontró lo
 que pedía y el usuario aclara dónde está ("está en mis me gusta"), vuelve a

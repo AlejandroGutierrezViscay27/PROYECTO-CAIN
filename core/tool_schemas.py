@@ -34,6 +34,14 @@ Analiza el mensaje del usuario y decide:
   pausa o reanuda la música, "para la música" (del verbo parar), la
   siguiente canción, aleatorio, sugiéreme música) → usa esas, no
   sistema_multimedia.
+- Si habla de vídeos o de YouTube y las herramientas youtube_* están
+  disponibles (busca un vídeo, pon un vídeo o algo recomendado en YouTube,
+  el último vídeo de un creador, otro parecido o del mismo canal que el que
+  se está viendo, "pon el 2" tras una búsqueda de vídeos, pausa, sigue o
+  pasa el vídeo; "abre youtube" sin más es abrir su página con
+  sistema_abrir_url)
+  → usa esas. Las pestañas del navegador (cuáles hay abiertas, cambiar a
+  una, cerrarla) van por navegador_pestanas.
 - Si es conversación normal, una pregunta general, o pide un EJEMPLO
   o EXPLICACIÓN de cómo hacer algo (sin pedir que tú lo hagas ahora)
   → NO invoques ninguna herramienta.
@@ -238,9 +246,9 @@ TOOLS_SO = [
             "name": "sistema_abrir_url",
             "description": (
                 "Abre una página web en el navegador del PC. Úsala para 'abre YouTube' "
-                "(https://www.youtube.com), "
-                "'busca X en YouTube' (https://www.youtube.com/results?search_query=X), "
-                "'abre la web de...'. Solo direcciones http o https completas."
+                "(https://www.youtube.com), 'abre la web de...', 'abre Google'. "
+                "Solo si en la lista no aparece youtube_buscar: 'busca X en YouTube' "
+                "(https://www.youtube.com/results?search_query=X). Solo direcciones http o https completas."
             ),
             "parameters": {
                 "type": "object",
@@ -423,6 +431,115 @@ TOOLS_SPOTIFY = [
                         "type": "string",
                         "description": "Con cambiar: el dispositivo como lo dice el usuario ('el Echo', 'esta computadora', 'el celular')",
                     },
+                },
+                "required": ["accion"],
+            },
+        },
+    },
+]
+
+# Fase 10.3 — el navegador de CAIN (Playwright, perfil propio) y YouTube. Solo
+# se le ofrecen al LLM si hay navegador (CAIN_SO y Playwright). El LLM nunca
+# da la dirección de un vídeo: da qué buscar o el número de un resultado.
+TOOLS_NAVEGADOR = [
+    {
+        "type": "function",
+        "function": {
+            "name": "navegador_pestanas",
+            "description": (
+                "Pestañas del navegador de CAIN: listar las abiertas ('¿qué pestañas tengo?'), "
+                "cambiar a una o cerrarla, por su número en la lista ('cierra la pestaña 2'), "
+                "o recargarla ('recarga la página', 'actualiza', 'dale F5'; sin número, la que se ve)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "accion": {"type": "string", "enum": ["listar", "cambiar", "cerrar", "recargar"]},
+                    "numero": {"type": "integer", "minimum": 1,
+                               "description": "Con cambiar o cerrar; con recargar, solo si dice cuál"},
+                },
+                "required": ["accion"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "youtube_buscar",
+            "description": (
+                "Busca vídeos en YouTube y muestra los primeros resultados SIN ponerlos "
+                "('busca vídeos de X', '¿qué hay en YouTube de X?')."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "consulta": {"type": "string", "description": "Qué buscar, p. ej. 'documental agujeros negros'"},
+                },
+                "required": ["consulta"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "youtube_reproducir",
+            "description": (
+                "Pone un vídeo en YouTube: 'pon X en YouTube' o 'ponme un vídeo de X' (consulta); "
+                "'pon el 2' o 'el primero' después de una búsqueda en YouTube (numero); "
+                "'otro de él', 'otro de ese canal', 'otro similar de él' (modo del_mismo_creador); "
+                "'otro parecido', 'algo similar a este' (modo parecido_de_otros); "
+                "'pon algo recomendado en YouTube' (sin consulta ni numero)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "consulta": {"type": "string", "description": "Qué vídeo poner, en palabras del usuario"},
+                    "numero":   {"type": "integer", "minimum": 1, "description": "Número de un resultado de la última búsqueda"},
+                    "modo":     {"type": "string", "enum": ["del_mismo_creador", "parecido_de_otros", "recomendado"],
+                                 "description": "A partir del vídeo que está abierto. del_mismo_creador: si dice "
+                                                "'de él', 'de ella' o 'de ese canal', aunque también diga similar "
+                                                "o parecido. parecido_de_otros: parecido, sin 'de él'. "
+                                                "recomendado: la portada"},
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "youtube_canal",
+            "description": (
+                "Lo más nuevo de un creador o canal de YouTube, ordenado por fecha (la búsqueda "
+                "normal ordena por relevancia). 'Pon el último vídeo de X', 'lo más nuevo de X', "
+                "'su vídeo más reciente' (poner: true); '¿qué ha subido X?', 'los últimos vídeos "
+                "de X', '¿qué ha subido él últimamente?' (poner: false, solo los muestra). Solo si "
+                "dice último, nuevo, reciente o qué ha subido; 'ponme un vídeo de finanzas de X' "
+                "(un tema) es youtube_reproducir con consulta."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "canal": {"type": "string",
+                              "description": "Nombre del creador o canal; si dice 'él', el del que se viene hablando"},
+                    "poner": {"type": "boolean", "description": "true: pone el más nuevo; false: lista los últimos"},
+                },
+                "required": ["canal", "poner"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "youtube_control",
+            "description": (
+                "Controla el vídeo de YouTube que está abierto: 'pausa el vídeo', 'sigue', "
+                "'dale play al vídeo', 'el siguiente vídeo', 'salta este vídeo'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "accion": {"type": "string", "enum": ["pausar", "reanudar", "siguiente"]},
                 },
                 "required": ["accion"],
             },

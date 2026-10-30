@@ -78,11 +78,26 @@ Variables de entorno en `.env` (ver `.env` para el listado completo):
   Audio), `simulado.py`; fábrica
   `crear_control_so()` según `CAIN_SO`. Las herramientas de sistema
   (`TOOLS_SO`) solo se ofrecen al LLM si hay uno activo.
-- `so/conectores/` — servicios por su API (Fase 10.4: `spotify.py`, OAuth
-  PKCE, token en `data/spotify_token.json`). Un `ErrorConector` se le
-  explica al usuario tal cual. `/spotify/conectar` y `/spotify/callback`
-  solo desde el propio PC. El LLM nunca da un URI: `core/arnes/spotify.py`
-  valida los que devuelve la API.
+- `so/navegador.py` — el navegador de CAIN (Fase 10.3): `Navegador` en
+  `base.py`, `NavegadorCAIN` (Playwright async en un hilo propio con su loop:
+  los turnos llegan de hilos distintos) y `NavegadorSimulado`; fábrica
+  `crear_navegador()` (necesita `CAIN_SO` y Playwright; usa el Brave/Edge
+  instalado). Cuando existe, `sistema_abrir_url` y "abre el navegador" van
+  por él: dos procesos no pueden compartir el perfil. Dentro de una página
+  solo actúa `en_sitio()` con JS fijo de un conector, que no corre fuera de
+  sus dominios. Corta las peticiones de las páginas a la red local
+  (`POSIBLE_RED_LOCAL` + `sistema.es_destino_local`). Playwright, por
+  defecto, lanza Chromium con `--no-sandbox` y sin bloqueador de popups: se
+  piden `chromium_sandbox=True` y `reglas.ARGUMENTOS_PLAYWRIGHT_QUITADOS`.
+  Arranca cada vez sin la sesión anterior y `main.py` lo cierra al apagar
+  (`Navegador.apagar`). YouTube y Google detectan que está automatizado
+  (cortes de vídeo, login bloqueado): no se oculta (FASE10_PLAN §12.3).
+- `so/conectores/` — conectores de sitio (Fase 10.4: `spotify.py`, OAuth
+  PKCE, token en `data/spotify_token.json`; Fase 10.3: `youtube.py`, sobre
+  el navegador). Un `ErrorConector` se le explica al usuario tal cual.
+  `/spotify/conectar` y `/spotify/callback` solo desde el propio PC. El LLM
+  nunca da un URI de Spotify ni la URL de un vídeo: `core/arnes/spotify.py`
+  y `core/arnes/youtube.py` validan lo que viene de la API o de la página.
 - `llm/` — interfaz `LLMProvider`, proveedores, fábrica por rol y registro
   de gasto.
 - `voice/` — interfaces `SpeechToText`/`TextToSpeech`, proveedores
@@ -158,6 +173,9 @@ Variables de entorno en `.env` (ver `.env` para el listado completo):
 - Casos de ataque del arnés en `tests/test_arnes.py`: todo poder nuevo trae
   primero los suyos. Los `TestClient` "locales" necesitan
   `headers={"host": "localhost"}` (si no, cuenta como DNS rebinding).
+- Ningún test abre un navegador: `BaseConSO` (`tests/test_so.py`) parchea
+  `crear_navegador` (por defecto `None`; `NavegadorSimulado` en
+  `tests/test_navegador.py`).
 - Para construir un `Cain` sin red: parchear `agent_mod.crear_llms` (ver
   `tests.mismo_llm_para_todos`) y `threading.Thread` con `HiloSincrono`
   (`tests/test_director.py`) para que el director corra en el momento.

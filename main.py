@@ -4,6 +4,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+SEGUNDOS_PARA_APAGARSE = 3
+
 def modo_terminal():
     from core.agent import Cain
     agent = Cain()
@@ -46,9 +48,26 @@ def modo_web():
     # importar web/app.py), y con lifespan activo Ctrl+C deja un traceback de
     # CancelledError que no significa nada. Si algún día hace falta código
     # de apagado (p.ej. cerrar servidores de proyectos), quitar esto.
+    # timeout_graceful_shutdown: tras Ctrl+C, uvicorn espera a que se cierren
+    # las conexiones y tareas abiertas; sin límite, una que no termina (un
+    # dispositivo que no contesta, un turno a medias) deja a CAIN sin apagarse.
     uvicorn.run("web.app:app", host=host, port=puerto, reload=False, lifespan="off",
+                timeout_graceful_shutdown=SEGUNDOS_PARA_APAGARSE,
                 ssl_certfile=cert if esquema == "https" else None,
                 ssl_keyfile=clave if esquema == "https" else None)
+
+    # Uvicorn ya cerró lo suyo. Un turno a medias en el pool de web/app.py (p.ej.
+    # esperando una confirmación, hasta 310 s) haría que Python lo esperara al
+    # salir: se sale ya. La memoria se escribe de forma atómica, así que cortar
+    # a mitad de una escritura no deja un JSON roto. El navegador de CAIN se
+    # cierra antes: matado con el proceso, se cree caído y al volver a abrirse
+    # restaura sus pestañas.
+    from web.app import cain_agent
+    if cain_agent.navegador:
+        cain_agent.navegador.apagar()
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(0)
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "terminal":

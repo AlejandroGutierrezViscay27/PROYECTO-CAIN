@@ -28,3 +28,27 @@ def crear_control_so():
         from so.windows import WindowsSO
         return WindowsSO()
     raise ValueError(f"CAIN_SO='{modo}' no reconocido. Usa 'off', 'simulado' o 'windows'.")
+
+
+def crear_navegador():
+    """
+    El navegador de CAIN (Fase 10.3), según CAIN_SO igual que crear_control_so().
+    Con "windows" hace falta Playwright y Brave o Edge; si falta algo, None y
+    el navegador se abre como en la 10.2 (sin pestañas ni YouTube). No abre
+    nada hasta que se le pide.
+    """
+    modo = os.getenv("CAIN_SO", "off").strip().lower()
+    if modo == "simulado":
+        from so.simulado import NavegadorSimulado
+        return NavegadorSimulado()
+    if modo != "windows":
+        return None
+    from core.arnes import sistema
+    from core.arnes.rutas import Denegado
+    try:
+        ruta, _ = sistema.resolver_app("navegador")
+        from so.navegador import NavegadorCAIN
+    except (Denegado, ImportError) as e:
+        print(f"[CAIN] Navegador sin pestanas ni YouTube ({type(e).__name__}); falta Playwright o el navegador")
+        return None
+    return NavegadorCAIN(ruta)

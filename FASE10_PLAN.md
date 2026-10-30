@@ -1,9 +1,11 @@
 # Fase 10 — Control del sistema operativo: plan y arnés de seguridad
 
-> Estado: **10.0, 10.1, 10.2 y 10.4 implementadas** (arnés, observar el
-> sistema, abrir apps y URLs, multimedia y volumen, Spotify por API; 267
-> pruebas en verde). Decisiones de la primera ronda tomadas (§11). WhatsApp y el
-> teclado/ratón genéricos están en **10.P — Pendientes de diseño** (§12).
+> Estado: **10.0 a 10.4 implementadas y probadas** (arnés, observar el
+> sistema, abrir apps y URLs, multimedia y volumen, navegador de CAIN con
+> pestañas y YouTube, Spotify por API; 347 pruebas en verde). Decisiones de
+> la primera ronda tomadas (§11). WhatsApp, el teclado/ratón genéricos y
+> YouTube sin cortes están en **10.P — Pendientes de diseño** (§12).
+> **Sigue la 10.5.**
 
 ## 0. Principio rector
 
@@ -413,15 +415,15 @@ pero tarda en arrancar.
 | ~~10.0~~ | ~~Arnés, auditoría, H1–H14~~ | — | ✅ hecho |
 | ~~10.1~~ | ~~Observar: ventanas abiertas, app activa, info del sistema~~ | N0 | ✅ hecho (§13) |
 | ~~10.2~~ | ~~Abrir apps de la lista blanca (navegador, Spotify) y URLs http(s); volumen y multimedia~~ | N1 | ✅ hecho (§14) |
-| 10.3 | Navegador de CAIN (Playwright + perfil propio) con pestañas + **YouTube** | N1 | listo |
+| ~~10.3~~ | ~~Navegador de CAIN (Playwright + perfil propio) con pestañas + **YouTube**~~ | N1 | ✅ hecho (§16; sin cortes de YouTube → §12.3) |
 | ~~10.4~~ | ~~**Spotify** por API oficial~~ | N1 | ✅ hecho (§15) |
 | 10.5 | **Análisis de documentos**: Excel y CSV primero; después PDF y Word | N0 | listo |
 | 10.6 | Archivos del usuario: listar, mover, organizar, Papelera | N3 | listo (con §11.3 recomendado) |
 | 10.8 | Código generado con integridad baja | — | listo |
-| 10.P | **Pendientes de diseño**: WhatsApp, teclado y ratón genéricos | — | ⏸️ §12 |
+| 10.P | **Pendientes de diseño**: WhatsApp, teclado y ratón genéricos, YouTube sin cortes | — | ⏸️ §12 |
 
 Orden propuesto: 10.1 → 10.2 → 10.4 (Spotify no depende del navegador) →
-10.3 → 10.5 → 10.6 → 10.8. **Siguiente: 10.3** (10.1, 10.2 y 10.4 cerradas). Lo de 10.P entra cuando se resuelva, como etapa
+10.3 → 10.5 → 10.6 → 10.8. **Ahora: la 10.5** (10.1 a 10.4 cerradas). Lo de 10.P entra cuando se resuelva, como etapa
 nueva.
 
 ---
@@ -496,6 +498,26 @@ rechaza porque no tiene nivel declarado en `reglas.py`.
   3. ¿Cómo "ve" CAIN la pantalla? Accesibilidad de Windows (UI
      Automation) o capturas a un modelo de visión, y si es esto último,
      qué capturas salen del PC.
+
+### 12.3 YouTube sin cortes (y con sesión)
+- **Estado**: aparcado (29/10). La 10.3 queda como está: buscar, poner y
+  controlar funcionan, pero YouTube corta los vídeos al rato y Google no deja
+  iniciar sesión, porque detectan el navegador automatizado (§16, segunda
+  ronda, punto 5). Se recarga con "recarga la página".
+- **Descartado**: ocultar la automatización (`navigator.webdriver` y
+  similares). Es evadir la detección de bots de YouTube/Google.
+- **Opciones si se retoma**:
+  1. **API oficial** (recomendada, como Spotify): buscar con la YouTube Data
+     API (clave gratuita, el LLM sigue sin dar URLs) y reproducir en el
+     navegador de CAIN abierto **sin Playwright**, como en la 10.2 (un Brave
+     normal: ni cortes ni bloqueo de sesión). Pausa y siguiente por la tecla
+     multimedia, que Brave recibe. Se pierde: pausa exacta (la tecla
+     alterna), "otro de él" / "algo parecido" leídos de la página y las
+     recomendaciones de la portada; ver qué cubre la API.
+  2. Iniciar sesión tú a mano en ese perfil abierto como Brave normal y luego
+     usarlo con Playwright. Google podría seguir poniendo trabas con la
+     sesión automatizada; es tu cuenta, decisión tuya.
+  3. Dejarlo como está y recargar cuando se corte (se vuelve a cortar).
 
 ---
 
@@ -672,3 +694,194 @@ rechaza porque no tiene nivel declarado en `reglas.py`.
   "pon la siguiente canción" a la tecla; el respaldo en código lo cubre.
   Enrutador real: 40 de 40 en conversaciones de varios turnos (tres
   rondas).
+
+---
+
+## 16. Fase 10.3 — hecho (probada por el usuario el 28 y 29/10)
+
+- **El navegador** (`so/navegador.py`, `NavegadorCAIN`): Playwright sobre el
+  Brave instalado (o Edge), con el perfil de `%LOCALAPPDATA%\CAIN\navegador`
+  y sin descargar navegadores. Corre en un **hilo propio con su event loop**:
+  los turnos llegan desde el pool de `web/app.py` (hilos distintos) y los
+  objetos de Playwright solo valen en el loop que los creó; así, además, el
+  navegador se atiende aunque nadie le pida nada. No se abre hasta que hace
+  falta; si cierras la ventana, se vuelve a abrir al siguiente pedido.
+  - Playwright habla con él por **tubería, no por puerto**: ningún otro
+    programa del PC puede tomar el control del navegador.
+  - Sin descargas (`accept_downloads=False`), sin service workers (sus
+    peticiones se saltarían el filtro), sin la barra de "controlado por
+    software de prueba", vídeos que suenan sin clic, y las preferencias
+    prudentes de la 10.2 (cámara, micrófono, ubicación, notificaciones).
+  - **Un solo dueño del perfil**: con el navegador activo, `sistema_abrir_url`
+    y "abre el navegador" van por él (otro proceso con el mismo perfil no
+    arrancaría). Si hay una ventana de ese perfil que no abrió Playwright,
+    CAIN pide cerrarla.
+  - **Red local cortada dentro del navegador**: ninguna página que abra CAIN
+    puede pedir nada a `localhost` (el propio CAIN), al router ni a otro
+    equipo. Un filtro amplio (`POSIBLE_RED_LOCAL`) lo aplica Playwright sin
+    salir del navegador, y `sistema.es_destino_local()` decide; el resto de
+    peticiones no pasa por Python (cargando YouTube, solo una lo hizo).
+    Comprobado de verdad con un servidor local y un control: con el filtro,
+    `ERR_BLOCKED_BY_CLIENT` y el servidor no recibe nada; sin él, llega.
+    Brave (permiso de localhost) y Chrome (Private Network Access) ya
+    bloqueaban el `fetch` desde una web pública: es una tercera capa.
+- **Pestañas** (`navegador_pestanas`): listar (N0), cambiar y cerrar (N1),
+  por el número de la lista; cada acción recibe también la URL de la pestaña
+  tal como se vio, y si ya no es esa no hace nada. Como mucho 15 pestañas.
+  Los títulos son texto ajeno: al usuario, nunca al LLM.
+- **YouTube** (`so/conectores/youtube.py`): una pestaña de YouTube (la
+  visible si hay varias) donde se busca y se pone.
+  - `youtube_buscar` (N0): abre la búsqueda y muestra los 5 primeros con
+    título y canal. `youtube_reproducir` (N1): por consulta (el primero), por
+    número de la última búsqueda (10 minutos de vigencia; "olvida" la borra) o
+    "algo recomendado" (el primero de la portada). `youtube_control` (N1):
+    pausar, reanudar y siguiente, exactos (no alternan como la tecla).
+  - **El LLM nunca da la URL de un vídeo.** Sale de un enlace de la página y
+    `core/arnes/youtube.py` lo reduce al id: `https://www.youtube.com/watch?v=<11>`.
+  - Los guiones son **JS fijo**, y antes de correr comprueban **en la propia
+    página** que siguen en youtube.com (y Python lo mira antes). Probado de
+    verdad: el de YouTube, en example.com, se niega.
+  - La tecla multimedia, si hay un vídeo sonando en el navegador de CAIN (y
+    Spotify no), va al vídeo: "pausa" pausa. Sin pestaña de YouTube no se
+    abre nada.
+  - Sin sesión ni historial, la portada de YouTube no tiene recomendaciones:
+    CAIN lo dice y propone iniciar sesión en su navegador.
+- **Pruebas**: 49 nuevas (316 en total), con `NavegadorSimulado`; ninguna
+  abre un navegador (`BaseConSO` parchea la fábrica). Enlaces de vídeo
+  falsos (otro dominio, `youtube.com.evil.com`, `javascript:`, dos `v`, ids
+  con `<script>`), red local (incluidas formas raras de escribir 127.0.0.1) y
+  que el filtro amplio no deje ninguna fuera, pestañas que cambiaron,
+  números falsos, títulos con inyección fuera del LLM, el historial y el
+  contexto. Dos barreras rotas a propósito para ver que las pruebas fallan.
+- **Contra Brave real** (perfil temporal, headless): búsqueda con resultados
+  limpios, pestañas, cerrar con URL equivocada (no cierra), red local
+  bloqueada y el guion fuera de sitio negado.
+- **Enrutador real**: 35 de 35 (frases sueltas y cuatro conversaciones que
+  mezclan YouTube, Spotify, pestañas y charla). Límite conocido: "busca en
+  YouTube el vídeo de esa canción" tras poner una lista no sabe qué canción
+  suena, porque el resultado de una herramienta nunca llega al enrutador.
+- **Primera ronda de tu prueba (28/10)** — dos fallos, corregidos:
+  1. "Ponme otro vídeo similar de él" repetía la consulta y volvía a sonar
+     **el mismo vídeo**. Ahora `youtube_reproducir` tiene `modo`:
+     `del_mismo_creador` (la pestaña Vídeos del canal del vídeo abierto) y
+     `parecido_de_otros` (los relacionados de la propia página). Ninguno
+     repite el vídeo abierto ni los últimos 30 que puso CAIN, y repetir la
+     misma consulta tampoco pone otra vez el último.
+  2. "Pon el último vídeo de Andrés Garza" buscaba "canal de Andrés Garza",
+     que ordena por relevancia (vídeos de hace 5 meses y 2 años). Nueva
+     herramienta **`youtube_canal`** (N1 si pone, N0 si solo lista): busca
+     el canal con el filtro de canales y abre su pestaña **Vídeos**, que va
+     del más nuevo al más viejo. El enlace del canal sale de la página y
+     `core/arnes/youtube.py` lo valida (`/@nombre` o `/channel/UC…`).
+  - Los resultados muestran **cuándo se publicó** cada vídeo, con las
+    abreviaturas de YouTube escritas completas ("hace 5 m" → "hace 5 meses").
+  - "Sigue" tardaba 30 s y fallaba: `play()` puede no resolverse nunca con
+    la pestaña en segundo plano. Ahora se espera como mucho 3 s.
+  - Hueco cerrado: `url_video` aceptaba un id con salto de línea al final
+    (`re.match` con `$`); ahora `fullmatch`.
+  - Comprobado contra YouTube real (headless, perfil temporal). 333 pruebas.
+    Enrutador real: 48 de 49. El que falla, "ponme otro vídeo similar de
+    él", va a `parecido_de_otros` (no repite, pero puede ser de otro canal);
+    "otro de él" sí va a `del_mismo_creador`.
+- **Ctrl+C no apagaba CAIN** (visto en la misma prueba): uvicorn cerraba el
+  puerto y se quedaba en "Waiting for connections to close" sin límite si un
+  dispositivo no contestaba al cierre (móvil con la pantalla apagada, pestaña
+  dormida). Reproducido con un Ctrl+C real y un cliente que no responde.
+  `main.py`: `timeout_graceful_shutdown=3` y `os._exit(0)` al salir de
+  uvicorn (un turno a medias en el pool no lo retiene). Ahora sale en 3,5 s,
+  también con el navegador de CAIN abierto, sin dejar Brave ni node.
+  `voice/stt.py`: `FOR_DISABLE_CONSOLE_CTRL_HANDLER=1` antes de cargar
+  ctranslate2: su runtime de Intel imprimió `forrtl: error (200)` con un
+  Ctrl+Break y dejó el proceso vivo (preventivo: no se pudo repetir limpio).
+  Con `uvicorn web.app:app --reload` no pasa por `main.py`: usar
+  `--timeout-graceful-shutdown 3`.
+
+- **Segunda ronda de tu prueba (29/10)**:
+  1. "Pausa" y "play" tras poner un vídeo iban a `spotify_control`. Respaldo
+     en código: `Cain.ultimo_medio` recuerda lo último que CAIN puso a sonar
+     (vídeo o Spotify) y `_control_por_youtube` manda ahí pausar, reanudar y
+     siguiente; si no se sabe (tras reiniciar), "pausa" va al vídeo solo si es
+     lo único que suena. La tecla multimedia también mira primero el último.
+  2. "Cámbiate a la 1" sin decir "pestaña" no lo entiende: **aceptado**.
+  3. **Recargar** (nuevo, N1): `navegador_pestanas` con `recargar`, la
+     pestaña visible o la que digas por número ("recarga la página", "F5").
+  4. **Pestañas about:blank que se abrían solas**: Playwright lanza Chromium
+     por defecto con `--disable-popup-blocking` (cualquier página, p. ej. un
+     anuncio, abría pestañas sin clic) y **con `--no-sandbox`** (las páginas
+     corrían sin el sandbox de Chromium: hueco de seguridad). Ahora
+     `chromium_sandbox=True` y `reglas.ARGUMENTOS_PLAYWRIGHT_QUITADOS` (también
+     `--disable-client-side-phishing-detection`). Comprobado con Brave
+     headless: sin esos argumentos y un `window.open` sin clic, bloqueado.
+     La consola anota quién abre cada pestaña nueva (`[DEBUG] navegador:
+     pestana nueva ...`). **Con CAIN reiniciado seguían saliendo**: la causa
+     real era otra. `os._exit` mataba Brave, que se creía caído y al abrirse
+     restauraba la sesión anterior (pestañas viejas, about:blank incluidas)
+     además de la about:blank de Playwright. Ahora `main.py` cierra el
+     navegador limpio al apagar (`Navegador.apagar`, 3 s como mucho) y, por si
+     muere de golpe igual, `preparar_perfil_navegador` arranca cada vez sin
+     la sesión anterior (borra `Default\Sessions` y marca la salida como
+     normal). Reproducido y comprobado con dos arranques sobre el mismo perfil
+     y Brave matado entre medias. Confirmado por el usuario. **Decidido**: el
+     navegador de CAIN empieza limpio, sin las pestañas de la vez anterior
+     (un YouTube restaurado se pondría a sonar solo por el autoplay).
+  5. **YouTube corta el vídeo** ("Se produjo un error. Actualiza la página")
+     y **Google no deja iniciar sesión** ("Es posible que este navegador o la
+     app no sean seguros"). Reproducido dos veces (headless, perfil temporal):
+     el vídeo se corta a los ~50 s **con y sin** el filtro de red local, así
+     que el filtro no es la causa. La página ve `navigator.webdriver = true`:
+     YouTube y Google detectan el navegador automatizado. **No se oculta la
+     automatización** (sería evadir su detección de bots). **Queda así por
+     ahora** (decisión del 29/10); opciones anotadas en §12.3.
+  - 347 pruebas.
+
+**Dónde quedó (28/10, fin de sesión)**: los arreglos de arriba están hechos y
+probados (333 pruebas; YouTube real headless; enrutador 48/49), **falta que
+el usuario repita la checklist de §16.1** con CAIN reiniciado, en especial
+las dos líneas nuevas de YouTube y que Ctrl+C lo apague. Ya probado por el
+usuario y bien: abrir el navegador, buscar, "pon el 2", pausa/sigue.
+### 16.1 Cómo probarla (para cerrar la 10.3)
+
+**Preparar**
+1. Añadir `CAIN_SO=windows` al `.env` (hoy no está: sin él no hay ninguna
+   herramienta de sistema).
+2. Cerrar cualquier ventana de Brave abierta con el perfil de CAIN (de la
+   10.2); si no, Playwright no puede arrancar el navegador.
+3. `pip install -r requirements.txt` (añade `playwright`; usa el Brave
+   instalado, no hace falta `playwright install`) y arrancar CAIN.
+
+**Probar en el PC (lo hace el usuario)**
+- [ ] "abre el navegador" → se abre Brave con el perfil de CAIN, sin barra
+      de "controlado por software de prueba".
+- [ ] "busca documentales de agujeros negros en youtube" → 5 resultados en el
+      chat y la búsqueda abierta en el navegador.
+- [ ] "pon el 2" → suena ese vídeo sin hacer clic.
+- [ ] "pausa", "sigue", "el siguiente" → exactos.
+- [ ] "otro de él" → otro vídeo del mismo canal, no el mismo; "algo parecido"
+      → uno de los relacionados.
+- [ ] "pon el último vídeo de Andrés Garza" → el más nuevo de su canal (con
+      fecha); "¿qué ha subido últimamente?" → la lista, sin poner nada.
+- [ ] Con el vídeo sonando, la tecla multimedia de play/pausa (o "pausa" sin
+      decir vídeo) → lo pausa.
+- [ ] "abre google" → pestaña nueva; "¿qué pestañas tengo?"; "cierra la 2";
+      "cámbiate a la 1".
+- [ ] "pon algo recomendado en youtube" → sin sesión, CAIN lo explica;
+      iniciar sesión en esa ventana y repetir → pone un vídeo.
+- [ ] Cerrar la ventana a mano y pedir otro vídeo → se vuelve a abrir.
+- [ ] Desde el móvil: "pon un video de lofi en youtube" → suena en el PC.
+- [ ] Que Spotify siga como antes ("pon mi lista del gym", "pausa").
+- [ ] Ctrl+C en la terminal → CAIN se apaga en unos segundos (con el móvil
+      o la pestaña conectados).
+
+**Pruebas automáticas y scripts** (`tests/manuales/`, no los corre `unittest`)
+- `.venv\Scripts\python -m unittest discover -s tests -t .` → 333 en verde.
+- `tests/manuales/enrutador_103.py`: enrutador real (gpt-4o-mini, gasta
+  algo de API) con 35 frases y conversaciones, sin ejecutar nada.
+- `tests/manuales/navegador_real_103.py`: `NavegadorCAIN` contra Brave real,
+  headless y con perfil temporal (no toca el de CAIN ni reproduce nada).
+- `tests/manuales/filtro_red_local_103.py`: el filtro de red local con un
+  servidor en 127.0.0.1:8765 y un control sin filtro.
+- Con `PYTHONIOENCODING=utf-8` si la consola es cp1252.
+
+Si algo falla: ajustar, volver a pasar lo de arriba, y entonces commit de la
+10.3 y actualizar `CAIN_documento.txt` (Fase 10 sigue como "⏳" sin el
+detalle de lo hecho, y su árbol no tiene `core/arnes/`, `so/` ni `espacio/`).

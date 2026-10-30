@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
+from so.conectores import ErrorConector
+
 
 @dataclass(frozen=True)
 class Ventana:
@@ -76,4 +78,75 @@ class ControlSO(ABC):
     @abstractmethod
     def silenciar(self, silenciado):
         """Silencia (True) o quita el silencio (False)."""
+        pass
+
+
+# ─── Fase 10.3: el navegador de CAIN ─────────────────────────────────────────
+
+class ErrorNavegador(ErrorConector):
+    pass
+
+
+@dataclass(frozen=True)
+class Pestana:
+    titulo: str
+    url:    str
+    activa: bool    # la visible en su ventana
+
+
+class Navegador(ABC):
+    """
+    El navegador de CAIN: su propio perfil, nunca el navegador del usuario.
+
+    Abre páginas http(s) cualesquiera (validadas con core.arnes.sistema), pero
+    dentro de una página solo actúa con en_sitio(), y solo en los dominios que
+    le pasa un conector (p. ej. YouTube). Los índices de pestaña empiezan en 0;
+    cada método que actúa sobre una pestaña recibe también su URL tal como se
+    vio, y no hace nada si la pestaña ya no es esa.
+    """
+
+    @abstractmethod
+    def mostrar(self):
+        """Abre el navegador si no lo está y lo trae al frente."""
+        pass
+
+    @abstractmethod
+    def pestanas(self) -> list[Pestana]:
+        """Pestañas abiertas. [] si el navegador no está abierto (no lo abre)."""
+        pass
+
+    @abstractmethod
+    def abrir_url(self, url):
+        """Abre una URL http(s) en una pestaña (la vacía, si hay una; si no, una nueva)."""
+        pass
+
+    @abstractmethod
+    def activar(self, indice, url_esperada):
+        """Trae al frente la pestaña `indice`."""
+        pass
+
+    @abstractmethod
+    def cerrar(self, indice, url_esperada):
+        """Cierra la pestaña `indice`."""
+        pass
+
+    def apagar(self):
+        """Al apagar CAIN: cierra el navegador limpio (si se mata, se cree caído)."""
+        pass
+
+    @abstractmethod
+    def recargar(self, indice, url_esperada):
+        """Recarga la pestaña `indice` (lo que haría el usuario con F5)."""
+        pass
+
+    @abstractmethod
+    def en_sitio(self, dominios, guion, arg=None, ir_a=None, esperar=None):
+        """
+        Corre `guion` (JavaScript fijo de un conector, nunca del LLM) en la
+        pestaña de ese sitio y devuelve su resultado. Con `ir_a` (una URL del
+        sitio), antes navega a ella en la pestaña del sitio o en una nueva;
+        sin `ir_a`, si no hay pestaña del sitio, lanza ErrorNavegador.
+        `esperar`: selector CSS que se espera (un rato) antes de correr el guion.
+        El guion no corre si la pestaña ya no está en uno de los `dominios`.
+        """
         pass

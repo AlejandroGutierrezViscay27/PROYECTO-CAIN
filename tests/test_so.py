@@ -47,11 +47,13 @@ class TestFabrica(unittest.TestCase):
 
 class BaseConSO(BaseAgente):
     so = None
+    navegador = None   # nunca el real: abriría Brave
 
     def setUp(self):
-        parche = mock.patch.object(agent_mod, "crear_control_so", lambda: self.so)
-        parche.start()
-        self.addCleanup(parche.stop)
+        for nombre, valor in (("crear_control_so", lambda: self.so), ("crear_navegador", lambda: self.navegador)):
+            parche = mock.patch.object(agent_mod, nombre, valor)
+            parche.start()
+            self.addCleanup(parche.stop)
         super().setUp()
 
 
@@ -240,7 +242,7 @@ class TestWindowsReal(unittest.TestCase):
         from so import windows
         so = windows.WindowsSO()
         with mock.patch.object(windows.subprocess, "Popen") as popen, \
-             mock.patch.object(windows, "_preparar_perfil_navegador"), \
+             mock.patch.object(windows, "preparar_perfil_navegador"), \
              mock.patch.dict(os.environ, {"OPENAI_API_KEY": "sk-secreto", "CAIN_TOKEN": "t"}):
             for ruta in (os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "cmd.exe"),
                          os.path.join(os.path.expanduser("~"), "Downloads", "brave.exe")):

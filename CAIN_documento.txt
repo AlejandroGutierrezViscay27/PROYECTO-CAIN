@@ -162,6 +162,39 @@ CAIN ya es un agente funcional con las siguientes capacidades:
   ✦ HTTPS opcional (certificado de mkcert) para hablarle desde el móvil
   ✦ Interfaz adaptada al móvil: memoria y proyectos en un cajón (☰)
 
+  CONTROL DEL SISTEMA (con un arnés de seguridad)
+  ✦ El LLM solo PROPONE una acción: una capa de código (core/arnes/)
+    decide si se ejecuta, si se confirma o si se rechaza. Nada de lo que
+    diga el prompt cuenta como seguridad
+  ✦ Niveles: N0 observar, N1 reversible, N2/N3 con confirmación por clic.
+    Desde el móvil, como mucho N1. Todo queda en data/auditoria.jsonl
+  ✦ Archivos solo dentro de espacio/; el repo, .env, claves y el sistema,
+    intocables. Borrar va a la Papelera
+  ✦ Ver ventanas abiertas e info del equipo; abrir apps de una lista
+    blanca (por ruta exacta) y URLs http(s) sin red local; teclas
+    multimedia y volumen
+  ✦ Una herramienta por turno: el resultado de una nunca elige la
+    siguiente (barrera contra la inyección de prompts)
+
+  SPOTIFY (API oficial)
+  ✦ Qué suena, tus listas, buscar, poner canciones, artistas, álbumes,
+    tus listas o tus Me gusta; pausa, siguiente, anterior, aleatorio
+  ✦ Sugerencias a partir de lo que más escuchas: solo suena lo que existe
+    de verdad en Spotify (el LLM nunca da un URI)
+  ✦ Pasar la música entre dispositivos (PC, móvil, Echo)
+  ✦ OAuth con PKCE, permisos mínimos (sin escritura sobre tus listas)
+
+  NAVEGADOR DE CAIN Y YOUTUBE
+  ✦ Brave con un perfil propio de CAIN (no ve tus contraseñas ni tu
+    historial), controlado con Playwright, con sandbox y bloqueador de
+    popups; las páginas que abre no pueden llegar a la red local
+  ✦ Pestañas: listar, cambiar, cerrar y recargar
+  ✦ YouTube: buscar, "pon el 2", lo último de un canal, otro del mismo
+    creador o uno parecido, pausa y siguiente exactos
+  ✦ El LLM nunca da la URL de un vídeo: sale de la propia página
+  ✦ "Pausa" o "sigue" van a lo último que CAIN puso a sonar (vídeo o
+    Spotify)
+
   LA CARA
   ✦ Rostro 3D reactivo (Three.js) que refleja el estado de CAIN en vivo
   ✦ Deformación orgánica por ruido simplex, con normales recalculadas
@@ -186,7 +219,17 @@ PROYECTO-CAIN/
 │   ├── tool_schemas.py → declaraciones JSON de las herramientas (Fase 6)
 │   ├── intent.py       → detección de intención y acción
 │   ├── prompts.py      → construcción del prompt dinámico
-│   └── executor.py     → ejecución de código y proyectos
+│   ├── executor.py     → ejecución de código y proyectos
+│   └── arnes/          → arnés de seguridad (Fase 10): niveles, reglas,
+│                         rutas, revisión del código generado, auditoría,
+│                         límites de sistema, Spotify y YouTube
+│
+├── so/
+│   ├── base.py         → interfaces ControlSO y Navegador
+│   ├── windows.py      → control real de Windows (ctypes, Core Audio)
+│   ├── simulado.py     → no toca nada (pruebas)
+│   ├── navegador.py    → el navegador de CAIN (Playwright sobre Brave)
+│   └── conectores/     → spotify.py (API oficial), youtube.py
 │
 ├── llm/
 │   ├── base.py            → clase abstracta LLMProvider
@@ -214,7 +257,9 @@ PROYECTO-CAIN/
 │
 ├── data/                  → memoria en runtime (no en git)
 ├── proyectos/             → proyectos generados (no en git)
-├── tests/                 → pruebas (unittest; nunca tocan data/)
+├── espacio/               → único sitio donde CAIN lee y escribe archivos
+├── tests/                 → pruebas (unittest; nunca tocan data/ ni abren
+│                             un navegador); tests/manuales/ contra servicios reales
 ├── main.py                → punto de entrada (web o terminal)
 ├── .env                   → configuración y API keys
 └── requirements.txt       → dependencias del proyecto
@@ -246,6 +291,9 @@ DECISIÓN DE DISEÑO CLAVE — Capa LLM Abstracta:
   ✦ WebSockets          → comunicación en tiempo real
   ✦ python-dotenv       → gestión de variables de entorno
   ✦ Jinja2              → templates HTML
+  ✦ Playwright          → el navegador de CAIN (sobre el Brave instalado)
+  ✦ httpx               → API de Spotify
+  ✦ send2trash          → borrar a la Papelera, nunca definitivo
 
   INTELIGENCIA ARTIFICIAL
   ✦ OpenAI API (gpt-4o-mini) → modelo por defecto en todos los roles
@@ -333,9 +381,21 @@ DECISIÓN DE DISEÑO CLAVE — Capa LLM Abstracta:
    dispositivo que los pidió (botón "Abrir proyecto" en el chat),
    no en el navegador del PC.
 
-⏳ FASE 10 — CONTROL DEL SISTEMA OPERATIVO
-   Mouse, teclado, aplicaciones, navegador. CAIN actúa
-   directamente sobre el entorno del usuario.
+🔄 FASE 10 — CONTROL DEL SISTEMA OPERATIVO (en curso, plan en FASE10_PLAN.md)
+   CAIN actúa sobre el entorno del usuario, siempre a través de un
+   arnés de seguridad determinista.
+   ✅ 10.0 Arnés: niveles, rutas confinadas, auditoría y 14 huecos
+          cerrados (WebSocket desde otras webs, DNS rebinding, XSS...)
+   ✅ 10.1 Observar: ventanas abiertas, app activa, info del equipo
+   ✅ 10.2 Abrir apps y URLs, teclas multimedia y volumen
+   ✅ 10.3 Navegador de CAIN con pestañas y YouTube
+   ✅ 10.4 Spotify por su API oficial
+   ⏳ 10.5 Análisis de documentos (Excel/CSV: el LLM entiende, el código
+          calcula)
+   ⏳ 10.6 Archivos del usuario: listar, mover, organizar
+   ⏳ 10.8 Código generado con integridad baja de Windows
+   ⏸️ Pendientes de diseño: WhatsApp, teclado y ratón genéricos,
+      YouTube sin cortes (YouTube detecta el navegador automatizado)
 
 ⏳ FASE 11 — MEMORIA AVANZADA
    Vector database (ChromaDB) para recuperación inteligente

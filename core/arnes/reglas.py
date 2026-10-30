@@ -36,6 +36,11 @@ NIVEL_HERRAMIENTA = {
     "spotify_control":   N1,   # pausar, reanudar, siguiente, anterior, aleatorio
     "spotify_sugerir":   N1,   # cada propuesta del LLM se busca antes de sonar
     "spotify_dispositivo": N1, # pasar la música a otro dispositivo (id de la API, no del LLM)
+    "navegador_pestanas": N1,  # Fase 10.3: cambiar, cerrar o recargar; "listar" baja a N0 (ver nivel_de)
+    "youtube_buscar":    N0,   # los resultados van al usuario, nunca al LLM
+    "youtube_reproducir": N1,  # solo vídeos de una página de YouTube (id de la página, no del LLM)
+    "youtube_control":   N1,   # pausar, reanudar, siguiente
+    "youtube_canal":     N1,   # lo último de un creador; solo listarlo baja a N0 (ver nivel_de)
     "crear_archivo":     N1,   # nunca sobrescribe
     "editar_archivo":    N1,   # guarda la versión anterior en .respaldos/
     "memoria_recordar":  N1,
@@ -191,6 +196,37 @@ LARGO_MAX_URL = 2000
 # otros equipos de casa ni en el propio CAIN.
 SUFIJOS_LOCALES = (".localhost", ".local", ".lan", ".home", ".internal", ".intranet",
                    ".corp", ".home.arpa")
+
+
+# ─── Navegador de CAIN y YouTube (Fase 10.3) ─────────────────────────────────
+
+# Argumentos fijos con que Playwright abre el navegador de CAIN (el perfil va
+# aparte, CARPETA_NAVEGADOR). Los vídeos que pide el usuario suenan sin
+# tener que hacer clic en la página.
+ARGUMENTOS_NAVEGADOR = ("--no-first-run", "--no-default-browser-check",
+                        "--autoplay-policy=no-user-gesture-required")
+
+# Argumentos que Playwright pone por defecto y CAIN quita: sin el bloqueador
+# de popups, cualquier página (un anuncio) abre pestañas solas (las about:blank
+# de la prueba del 29/10); sin la detección de phishing, menos protección.
+# --enable-automation pinta la barra de "controlado por software de prueba".
+# El sandbox se pide aparte (chromium_sandbox=True en so/navegador.py).
+ARGUMENTOS_PLAYWRIGHT_QUITADOS = ("--enable-automation", "--disable-popup-blocking",
+                                  "--disable-client-side-phishing-detection")
+
+# Cuánto se espera al navegador en cada petición (abrirlo la primera vez
+# incluido) y a que una página muestre lo que se busca en ella.
+NAVEGADOR_TIEMPO_MAX = 30   # segundos
+NAVEGADOR_ESPERA_PAGINA = 12
+NAVEGADOR_TIEMPO_APAGAR = 3  # al apagar CAIN, para cerrarlo limpio
+
+# Pestañas como máximo: CAIN no abre una más pasado esto.
+MAX_PESTANAS = 15
+
+# Dónde actúa el conector de YouTube (el dominio y sus subdominios). Fuera de
+# aquí, CAIN puede abrir una página, pero no hace nada dentro de ella.
+YOUTUBE_DOMINIOS = ("youtube.com",)
+YOUTUBE_URL      = "https://www.youtube.com"
 
 
 # ─── Spotify (Fase 10.4) ─────────────────────────────────────────────────────

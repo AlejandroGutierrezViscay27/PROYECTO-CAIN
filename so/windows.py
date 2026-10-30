@@ -154,13 +154,13 @@ class WindowsSO(ControlSO):
         if list(argumentos) not in permitidos:
             raise Denegado("esos argumentos no son los fijos de la app")
         if list(argumentos) == reglas.argumentos_app("navegador"):
-            _preparar_perfil_navegador()
+            preparar_perfil_navegador()
         _lanzar(ruta, list(argumentos))
 
     def abrir_url(self, url):
         url = sistema.validar_url(url)
         ruta, argumentos = sistema.resolver_app("navegador")
-        _preparar_perfil_navegador()
+        preparar_perfil_navegador()
         _lanzar(ruta, [*argumentos, url])
 
     def multimedia(self, accion):
@@ -194,10 +194,6 @@ _PREFERENCIAS_NAVEGADOR = {
 }
 
 
-def _entorno_app():
-    return {k: v for k, v in os.environ.items() if k.upper() in reglas.ENTORNO_APPS}
-
-
 def _lanzar(ruta, argumentos):
     """Abre el programa sin consola y sin esperarlo. Nunca con shell."""
     if not sistema.es_ejecutable_permitido(ruta):
@@ -205,18 +201,31 @@ def _lanzar(ruta, argumentos):
     subprocess.Popen(
         [ruta, *argumentos],
         cwd=os.path.dirname(ruta),
-        env=_entorno_app(),
+        env=sistema.entorno_apps(),
         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         close_fds=True, creationflags=_SIN_CONSOLA,
     )
 
 
-def _preparar_perfil_navegador():
-    """La primera vez, crea el perfil de CAIN con preferencias prudentes."""
-    preferencias = os.path.join(reglas.CARPETA_NAVEGADOR, "Default", "Preferences")
+def preparar_perfil_navegador():
+    """
+    La primera vez, crea el perfil de CAIN con preferencias prudentes. Cada
+    vez, arranca sin la sesión anterior: si CAIN se apagó de golpe, el
+    navegador se cree caído y restaura sus pestañas (más la about:blank con
+    que lo abre Playwright: las pestañas en blanco de la prueba del 29/10).
+    """
+    perfil = os.path.join(reglas.CARPETA_NAVEGADOR, "Default")
+    preferencias = os.path.join(perfil, "Preferences")
     if not os.path.exists(preferencias):
-        os.makedirs(os.path.dirname(preferencias), exist_ok=True)
+        os.makedirs(perfil, exist_ok=True)
         memory._guardar_json(preferencias, _PREFERENCIAS_NAVEGADOR)
+        return
+    shutil.rmtree(os.path.join(perfil, "Sessions"), ignore_errors=True)
+    actuales = memory._cargar_json(preferencias, None)
+    if isinstance(actuales, dict) and isinstance(actuales.get("profile"), dict):
+        if actuales["profile"].get("exit_type") != "Normal" or not actuales["profile"].get("exited_cleanly"):
+            actuales["profile"].update({"exit_type": "Normal", "exited_cleanly": True})
+            memory._guardar_json(preferencias, actuales)
 
 
 # ─── Fase 10.2: teclas multimedia ────────────────────────────────────────────

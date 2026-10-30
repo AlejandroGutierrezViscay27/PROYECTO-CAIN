@@ -76,6 +76,10 @@ def nivel_de(herramienta, argumentos):
     nivel = reglas.NIVEL_HERRAMIENTA.get(herramienta)
     if herramienta == "memoria_olvidar" and argumentos.get("objetivo") in ("todo", "historial"):
         nivel = reglas.N3
+    if herramienta == "navegador_pestanas" and argumentos.get("accion") == "listar":
+        nivel = reglas.N0
+    if herramienta == "youtube_canal" and argumentos.get("poner") is not True:
+        nivel = reglas.N0
     return nivel
 
 

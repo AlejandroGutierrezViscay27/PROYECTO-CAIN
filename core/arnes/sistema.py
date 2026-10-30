@@ -97,6 +97,63 @@ def _revisar_host(host):
         raise Denegado("no abro direcciones de la red local")
 
 
+def es_destino_local(url):
+    """
+    Para el navegador de CAIN (10.3): True si una petición que hace una
+    página va a la red local (el router, otro equipo, el propio CAIN). Se
+    mira solo el sitio: las páginas piden URLs largas o con caracteres que
+    validar_url() no admite y que aquí no importan.
+    """
+    try:
+        host = urlsplit(url).hostname
+    except ValueError:
+        return True
+    if not host:
+        return False
+    try:
+        _revisar_host(host.rstrip("."))
+    except Denegado:
+        return True
+    return False
+
+
+def host_en(url, dominios):
+    """True si la URL es http(s) y su sitio es uno de `dominios` o un subdominio suyo."""
+    try:
+        partes = urlsplit(url)
+        host = (partes.hostname or "").rstrip(".")
+    except ValueError:
+        return False
+    if partes.scheme.lower() not in reglas.ESQUEMAS_URL or not host:
+        return False
+    return any(host == d or host.endswith("." + d) for d in dominios)
+
+
+def entorno_apps():
+    """Las variables de entorno que heredan las apps que abre CAIN: sin secretos del .env."""
+    return {k: v for k, v in os.environ.items() if k.upper() in reglas.ENTORNO_APPS}
+
+
+ACCIONES_PESTANAS = ("listar", "cambiar", "cerrar", "recargar")
+
+
+def validar_accion_pestanas(accion):
+    if accion not in ACCIONES_PESTANAS:
+        raise Denegado("esa acción de pestañas no existe")
+    return accion
+
+
+def validar_numero(valor, cantidad):
+    """Un número de una lista que vio el usuario (1..cantidad). Lanza Denegado si no."""
+    if isinstance(valor, float) and valor.is_integer():
+        valor = int(valor)
+    if isinstance(valor, bool) or not isinstance(valor, int):
+        raise Denegado("falta el número")
+    if not 1 <= valor <= cantidad:
+        raise Denegado(f"no hay un número {valor} en la lista (hay {cantidad})")
+    return valor
+
+
 def validar_multimedia(accion):
     if accion not in ACCIONES_MULTIMEDIA:
         raise Denegado("esa acción multimedia no existe")
